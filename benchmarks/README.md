@@ -48,9 +48,33 @@ uint32 32) and is slightly larger on byte-aligned vocab. The honest conclusion (
 dense small-vocab uniform reads; the wavelet's premium buys rank/select/FM-search and large-vocab footprint** —
 the win is capabilities and sparse/search access, not per-element gather speed.
 
+## M6 result — Experiment D: fused decode+embedding-gather (`make fused`)
+
+Tests the P3 thesis (decode inside the consumer, no intermediate token buffer) against unfused
+decode-then-gather. V=32768, 100K queries, fp32 embedding.
+
+```
+    dim  unfused     fused-blk   fused-tpq   correctness
+     64     427 M/s     151 M/s     104 M/s   BIT-IDENTICAL ✓
+    768     100 M/s      23 M/s       2 M/s   BIT-IDENTICAL ✓
+```
+
+**Honest result: unfused wins here, at every dim.** The wavelet decode is sequential (its best mapping is one
+thread/query — fully parallel), but the embedding-row copy wants block/query coalescing — **opposite ideal
+mappings**, which the unfused two-kernel path gives each for free. Fusion's block/query variant serializes the
+decode (one active thread/block); the thread/query variant strides the copy (uncoalesced) and collapses at large
+dim. And the avoided intermediate is tiny (token ids, 4 B), so there's no memory win either.
+
+**The lesson (the actual contribution): fuse by how expensive the avoided intermediate is.** P3 pays when the
+intermediate is LARGE — the prototype's decode-in-matmul avoids the full dequantized weight matrix (10.6× less
+VRAM) — or the consumer is LIGHT/SPARSE (KV-page selection, sparse gather). Dense embedding gather is the wrong
+showcase. This is the constitution's P7 in action: the negative result is reported, and it makes the thesis
+sharper and more useful.
+
 ## Files
 - `reference.cfwv`, `refs/*.cfwv` — frozen Warp indexes + golden queries + raw tokens (git-ignored; regenerate
   with `make reference` / `make experiment-a`).
-- `reference_io.h` — the `.cfwv` v2 loader, shared by both benchmarks.
+- `reference_io.h` — the `.cfwv` v2 loader, shared by the benchmarks.
 - `gpu_access.cu` — M1: loads the reference, runs `cf_access_async`, verifies bit-identity, times both layers.
 - `frontier.cu` — M2: raw gather vs wavelet access across vocab and pattern (Experiment A).
+- `fused_embedding.cu` — M6: fused decode+gather (two mappings) vs unfused (Experiment D).

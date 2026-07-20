@@ -70,11 +70,22 @@ correctness oracle and honest CPU baseline (§9). Establishes the build ≠ quer
 **Acceptance.** CPU backend matches GPU bit-for-bit on a fuzz corpus; CPU `access`/`rank` throughput reported as
 a real baseline (not a Python loop); builder round-trips the on-device format.
 
-## M6 — Fused `access` + embedding gather (the thesis)
+## M6 — Fused `access` + embedding gather (the thesis) — ◐ built + measured; honest boundary found
 **Goal.** The first fused decode-and-consume kernel (P3): decode token ID → gather embedding row → write
 embedding, with **no decompressed token buffer** (Experiment D).
-**Acceptance.** Beats decode-then-gather on **end-to-end embeddings/s and bytes moved** (not decoded-tokens/s);
-output embeddings bit-identical to the unfused path.
+**Delivered (`src/cuda/fused_embedding.cu`, `benchmarks/fused_embedding.cu`).** Two fused mappings, both
+**bit-identical** to the unfused path, both exposed device-native (`cf_embedding_gather_async`).
+**Honest result (RTX 2080 Ti, V=32768, 100K queries):** unfused (two kernels) **wins at every dim** —
+99–427 M emb/s vs fused-block 23–151 vs fused-tpq 2–118. Why: decode is inherently sequential (best mapping =
+one thread/query, fully parallel) but the row copy wants block/query coalescing — **opposite ideal mappings**,
+which the unfused two-kernel path satisfies independently. And embedding gather's avoided intermediate is tiny
+(token ids, 4 B), so fusion saves no meaningful memory.
+**The sharpened thesis (this is the value):** P3 fusion pays **when the avoided intermediate is LARGE** — e.g.
+the prototype's decode-in-matmul avoids materializing the full dequantized weight matrix (**10.6× less VRAM**) —
+**or the consumer is LIGHT/SPARSE** (KV-page selection, sparse gather, FM-candidate retrieval). *Fuse by how
+expensive the intermediate is, not by fusing everything.* Embedding gather was the wrong showcase.
+**Next.** Re-target the fused demonstration at a large-intermediate op: **decode + KV-dequant** (avoids a big
+dequantized KV tile) or **RRR-decode + sparse gather**. This is where fusion's memory win is real.
 
 ## M7 — FM backward-search + locate on GPU
 **Goal.** Port `count`/`locate` (backward search over the RRR/BWT wavelet). The Warp prototype already builds the
