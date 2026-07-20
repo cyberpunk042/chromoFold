@@ -1,28 +1,45 @@
-# ChromoFold native engine — build (milestone M1).
+# ChromoFold native engine — build (milestones M1, M2).
 # sm_75 = RTX 2080 / 2080 Ti (the reference box). Override ARCH for other GPUs.
 
 ARCH   ?= sm_75
 NVCC   ?= nvcc
+PYTHON ?= python
 CXXSTD ?= c++17
-NVFLAGS = -O3 -std=$(CXXSTD) -arch=$(ARCH) -Iinclude --expt-relaxed-constexpr -lineinfo
+NVFLAGS = -O3 -std=$(CXXSTD) -arch=$(ARCH) -Iinclude -Ibenchmarks --expt-relaxed-constexpr -lineinfo
 
 BUILD = build
+REFS  = benchmarks/refs
+VOCABS = 4 16 256 32768 65536 131072
 
-.PHONY: all clean bench reference
+.PHONY: all clean bench frontier reference experiment-a
 
-all: $(BUILD)/gpu_access
+all: $(BUILD)/gpu_access $(BUILD)/frontier
 
-$(BUILD)/gpu_access: benchmarks/gpu_access.cu src/cuda/access.cu include/chromofold/chromofold.h
+$(BUILD)/gpu_access: benchmarks/gpu_access.cu benchmarks/reference_io.h src/cuda/access.cu include/chromofold/chromofold.h
 	@mkdir -p $(BUILD)
 	$(NVCC) $(NVFLAGS) benchmarks/gpu_access.cu src/cuda/access.cu -o $@
 
-# regenerate the frozen reference vector from the Warp prototype
-reference: tools/export_reference.py
-	python tools/export_reference.py benchmarks/reference.cfwv
+$(BUILD)/frontier: benchmarks/frontier.cu benchmarks/reference_io.h src/cuda/access.cu include/chromofold/chromofold.h
+	@mkdir -p $(BUILD)
+	$(NVCC) $(NVFLAGS) benchmarks/frontier.cu src/cuda/access.cu -o $@
 
-# verify + benchmark against the frozen reference
-bench: $(BUILD)/gpu_access
+# M1: freeze the default reference vector and verify the CUDA access kernel against it
+reference: tools/export_reference.py
+	$(PYTHON) tools/export_reference.py benchmarks/reference.cfwv
+
+bench: $(BUILD)/gpu_access reference
 	cd benchmarks && ../$(BUILD)/gpu_access reference.cfwv
 
+# M2: freeze one reference per vocabulary width, then run the price-of-addressability frontier
+experiment-a: $(BUILD)/frontier
+	@mkdir -p $(REFS)
+	@for v in $(VOCABS); do \
+	  $(PYTHON) tools/export_reference.py $(REFS)/ref_V$$v.cfwv --vocab $$v >/dev/null && echo "froze V=$$v"; \
+	done
+	$(BUILD)/frontier $(REFS)/ref_V4.cfwv $(REFS)/ref_V16.cfwv $(REFS)/ref_V256.cfwv \
+	                  $(REFS)/ref_V32768.cfwv $(REFS)/ref_V65536.cfwv $(REFS)/ref_V131072.cfwv
+
+frontier: experiment-a
+
 clean:
-	rm -rf $(BUILD)
+	rm -rf $(BUILD) $(REFS)

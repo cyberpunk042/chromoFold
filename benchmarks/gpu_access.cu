@@ -5,13 +5,13 @@
 // Usage: ./gpu_access [reference.cfwv]
 
 #include "chromofold/chromofold.h"
+#include "reference_io.h"
 
 #include <cuda_runtime.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
 #include <vector>
 
 #define CK(x)                                                                                                  \
@@ -23,40 +23,6 @@
     }                                                                                                          \
   } while (0)
 
-struct Ref {
-  uint32_t levels, nwords, nblocks, nqueries;
-  uint64_t n;
-  std::vector<uint32_t> words;
-  std::vector<int32_t> sb, zeros;
-  std::vector<uint32_t> pos, golden;
-};
-
-static bool load(const char *path, Ref &r) {
-  FILE *f = std::fopen(path, "rb");
-  if (!f) return false;
-  char magic[4];
-  uint32_t version;
-  if (std::fread(magic, 1, 4, f) != 4 || std::memcmp(magic, "CFWV", 4) != 0) return false;
-  std::fread(&version, 4, 1, f);
-  std::fread(&r.levels, 4, 1, f);
-  std::fread(&r.n, 8, 1, f);
-  std::fread(&r.nwords, 4, 1, f);
-  std::fread(&r.nblocks, 4, 1, f);
-  std::fread(&r.nqueries, 4, 1, f);
-  r.words.resize((size_t)r.levels * r.nwords);
-  r.sb.resize((size_t)r.levels * (r.nblocks + 1));
-  r.zeros.resize(r.levels);
-  r.pos.resize(r.nqueries);
-  r.golden.resize(r.nqueries);
-  std::fread(r.words.data(), 4, r.words.size(), f);
-  std::fread(r.sb.data(), 4, r.sb.size(), f);
-  std::fread(r.zeros.data(), 4, r.zeros.size(), f);
-  std::fread(r.pos.data(), 4, r.pos.size(), f);
-  std::fread(r.golden.data(), 4, r.golden.size(), f);
-  std::fclose(f);
-  return true;
-}
-
 static double pct(std::vector<double> &v, double p) {
   std::sort(v.begin(), v.end());
   size_t i = (size_t)(p / 100.0 * (v.size() - 1) + 0.5);
@@ -66,8 +32,8 @@ static double pct(std::vector<double> &v, double p) {
 int main(int argc, char **argv) {
   const char *path = (argc > 1) ? argv[1] : "reference.cfwv";
   Ref r;
-  if (!load(path, r)) {
-    std::fprintf(stderr, "could not read reference file: %s\n", path);
+  if (!cf_load_reference(path, r)) {
+    std::fprintf(stderr, "could not read reference file (need .cfwv v2): %s\n", path);
     return 1;
   }
 

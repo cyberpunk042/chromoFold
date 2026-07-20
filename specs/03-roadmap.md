@@ -36,12 +36,22 @@ stream, no host copy — P5), with compile-time specialization by vocabulary wid
 **Next (M2).** Raw GPU gather baseline + Warp head-to-head across V and batch; wire pybind11 so the Python API
 is unchanged.
 
-## M2 — Baseline frontier for `access`
+## M2 — Baseline frontier for `access` — ◐ frontier DONE (pybind11 next)
 **Goal.** Compare CUDA C++ `access` against **raw GPU gather** (uint8/16/32) and Warp, across vocabulary widths
-and batch sizes; add compile-time specialization by `levels` (§5 of architecture).
-**Acceptance.** An Experiment-A table (raw gather vs packed vs RRR wavelet) with resident B/token, ns/access,
-p95, effective bandwidth — stating plainly where addressability costs more than raw gather (small V) and where
-it wins (search/sparse).
+and query patterns; compile-time specialization by `levels` (§5 of architecture).
+**Delivered — Experiment A (`benchmarks/frontier.cu`, RTX 2080 Ti).** Raw gather vs wavelet access, kernel-only
+median over 30 reps, three query patterns, six vocabularies. Honest findings:
+- raw gather is the floor (~0.10 ns, flat across V — one memory load, no rank/search).
+- addressability premium (wavelet ÷ gather), **uniform** queries: 1.7× (V=4) → 6.3× (V=256) → 13.4× (V=128K);
+  it scales with `log₂(V)` (level count). **Sorted/contiguous roughly halves it** (V=256: 6.3× → 2.6×) via
+  coalescing + rank-directory cache reuse — evidence for warp-cooperative queries (architecture §7).
+- footprint: wavelet ≈ `log₂(V)` bits/tok, so it is *smaller* than raw where the type wastes bits (V=128K:
+  19 b/tok vs raw uint32 32) and slightly larger on byte-aligned vocab (V=256: 9 vs uint8 8).
+- **The honest line:** raw gather wins for dense, small-vocab, uniform reads; the wavelet's premium buys
+  rank/select/FM-search (which gather cannot do) and large-vocab footprint. The win is *capabilities and
+  sparse/search access*, not per-element gather speed — consistent with the constitution (P2, P10).
+**Remaining.** pybind11 binding so `cf_access` is callable from Python with the prototype's API unchanged;
+add the RRR-wavelet row and effective-bandwidth column.
 
 ## M3 — CUDA C++ `rank` + two-level rank directory
 **Goal.** Port `rank`; implement and benchmark the two-level rank directory (§6) vs the eight-word-scan layout.

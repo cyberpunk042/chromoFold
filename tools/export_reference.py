@@ -5,11 +5,14 @@ bit-for-bit. Depends on the measured prototype (warp-solar-system-shaders/warp_c
 
     python tools/export_reference.py [out.cfwv] [--n N] [--vocab V] [--queries Q]
 
-Binary layout (little-endian):
-    magic "CFWV" | u32 version=1 | u32 levels | u64 n | u32 nwords | u32 nblocks | u32 nqueries
+Binary layout v2 (little-endian):
+    magic "CFWV" | u32 version=2 | u32 levels | u64 n | u32 nwords | u32 nblocks | u32 nqueries
+                 | u32 token_bytes | u32 vocab
     words[levels*nwords] u32 | superblocks[levels*(nblocks+1)] i32 | zeros[levels] i32
-    positions[nqueries] u32 | golden_tokens[nqueries] u32
+    positions[nqueries] u32 | golden_tokens[nqueries] u32 | raw_tokens[n * token_bytes]
 `nblocks` is the superblock count; the sb table has nblocks+1 entries per level. SB (words/superblock) = 8.
+`raw_tokens` is the minimal-width packed token stream (the raw-GPU-gather baseline for Experiment A):
+token_bytes = 1 if levels<=8, 2 if levels<=16, else 4.
 """
 import argparse
 import os
@@ -47,23 +50,28 @@ def main():
     assert np.array_equal(golden, seq[pos]), "prototype access disagrees with the sequence"
     assert SB == 8, f"exporter assumes SB=8, prototype has SB={SB}"
 
+    token_bytes = 1 if levels <= 8 else (2 if levels <= 16 else 4)
+    raw_dtype = {1: np.uint8, 2: np.uint16, 4: np.uint32}[token_bytes]
+    raw = seq.astype(raw_dtype)                                      # minimal-width raw token stream (gather baseline)
+
     out = os.path.abspath(a.out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "wb") as f:
         f.write(b"CFWV")
-        f.write(struct.pack("<IIQIII", 1, levels, a.n, nwords, nblocks, a.queries))
+        f.write(struct.pack("<IIQIIIII", 2, levels, a.n, nwords, nblocks, a.queries, token_bytes, a.vocab))
         f.write(np.ascontiguousarray(words).tobytes())
         f.write(np.ascontiguousarray(sb).tobytes())
         f.write(np.ascontiguousarray(zeros).tobytes())
         f.write(np.ascontiguousarray(pos).tobytes())
         f.write(np.ascontiguousarray(golden).tobytes())
+        f.write(np.ascontiguousarray(raw).tobytes())
 
-    idx_mb = (words.nbytes + sb.nbytes + zeros.nbytes) / 1e6
+    idx_b = words.nbytes + sb.nbytes + zeros.nbytes
     print(f"wrote {out}")
     print(f"  n={a.n:,}  vocab={a.vocab}  levels={levels}  nwords={nwords:,}  nblocks={nblocks:,}  "
           f"queries={a.queries:,}")
-    print(f"  resident index {idx_mb:.2f} MB ({(words.nbytes+sb.nbytes+zeros.nbytes)*8/a.n:.2f} b/tok)  "
-          f"golden verified vs sequence ✓")
+    print(f"  wavelet index {idx_b/1e6:.2f} MB ({idx_b*8/a.n:.2f} bits/tok)  raw tokens {token_bytes} B/tok  "
+          f"golden verified ✓")
 
 
 if __name__ == "__main__":
