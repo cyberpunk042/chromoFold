@@ -54,16 +54,18 @@ lesson** — do not bury or spin it.
 | M6 fused decode-in-GEMM (large-intermediate) | ✅ | bit-exact to golden; **10.6× less VRAM**, faster at 4096² (positive case) |
 | M6/M9 fused KV-dequant attention | ✅ | bit-identical; **7.7–8.3× less KV VRAM** (KIVI int4+Huffman); capacity win, M9 brick |
 | M6 fused embedding-gather (small-intermediate) | ◐ | built, bit-identical; **honest negative** (fuse only large-intermediate) |
-| M5 C++ builder + CPU oracle (RRR-wavelet **+ FM**) | ◐ | native C++ build, **no Warp**; GPU==CPU bit-identical (access/rank **+ count/locate**); AVX + GPU-SA next |
-| M5 AVX/threaded CPU · GPU suffix array · Rust · PTX | ☐ | not started |
+| M5 C++ builder + CPU oracle (RRR-wavelet **+ FM**) | ◐ | native C++ build, **no Warp**; GPU==CPU bit-identical (access/rank **+ count/locate**) |
+| M5 GPU suffix-array build | ✅ | bit-identical to CPU SA; **21–23× faster** at 2M (construction leaves the CPU) |
+| M5 AVX/threaded CPU · Rust · PTX | ☐ | not started |
 
 **Next:** RRR is wired under the wavelet levels (M4, 5.80 b/tok on the BWT) **and** FM backward-search rides on it
 (M7: `cf_fm_count_async`/`cf_fm_ranges_async`/`cf_fm_locate_async`, count + locate bit-identical to ground truth,
 ~19 M patterns/s). The compact index is now decoded, searched, and sampled from without leaving VRAM. Remaining:
 the native C++ builder (M5, `tools/build_index.cpp`) now builds **both** the RRR-wavelet index **and** the FM-index
 with **no Warp**, and the GPU kernels are **bit-identical to its CPU oracle** (access/rank **and** count/locate) —
-the whole searchable stack is build≠query, self-hosted. Remaining: AVX/threaded CPU backend +
-GPU suffix-array build (the SA is still CPU); pybind11; wiring the KV fusion into a real inference path (M9). Two
+the whole searchable stack is build≠query, self-hosted; the **suffix-array build now runs on the GPU too** (M5,
+bit-identical to CPU, **21–23× faster** — construction leaves the CPU). Remaining: AVX/threaded CPU backend;
+pybind11; wiring the KV fusion into a real inference path (M9). Two
 large-intermediate fusions have now landed, both reusing `cf_bh_decode_at`: int4 decode-in-GEMM (M6, **10.6× less
 VRAM**, faster at 4096²) and **fused KV-dequant windowed attention (M6/M9, 7.7–8.3× less KV VRAM**, bit-identical —
 the long-context capacity brick for M9).
@@ -84,6 +86,7 @@ make PYTHON=~/warp-solar-system-shaders/.venv/bin/python fused-matmul   # M6 fus
 make PYTHON=~/warp-solar-system-shaders/.venv/bin/python kv-attention   # M6/M9 fused KV-dequant windowed attention
 make PYTHON=~/warp-solar-system-shaders/.venv/bin/python fused          # M6 fused embedding vs unfused
 make build-index                          # M5 native C++ build (no Warp): RRR-wavelet + FM, GPU==CPU bit-identical
+make suffix-array                         # M5 GPU suffix-array build vs CPU (bit-identical + speedup), no Python
 ```
 
 ## Layout
@@ -96,6 +99,7 @@ include/chromofold/detail/fm_search_device.cuh  device-side FM backward-search +
 include/chromofold/detail/block_huffman_device.cuh  device-side LUT decode-at-bit (feeds fused decode-in-GEMM)
 src/cuda/{access,rank,rrr,rrr_wavelet,fm_search,fused_embedding,fused_matmul,fused_kv_attention}.cu  the CUDA kernels
 tools/build_index.cpp                      native C++20 offline builder (SA→BWT→RRR→.cfrw + FM→.cffm), no Warp; CPU oracle
+src/cuda/suffix_array.cu                    GPU suffix-array build (thrust prefix-doubling); include/.../detail/suffix_cpu.hpp = CPU golden
 benchmarks/{gpu_access,frontier,rank_bench,rrr_bench,rrr_wavelet,fm_search,fused_embedding,fused_matmul}.cu  verify + measure
 benchmarks/reference_io.h                  the .cfwv v3 loader (shared)
 tools/{export_reference,export_rrr,export_rrr_wavelet,export_fm_index,export_fused_matmul}.py  freeze Warp golden

@@ -12,9 +12,9 @@ BUILD = build
 REFS  = benchmarks/refs
 VOCABS = 4 16 256 32768 65536 131072
 
-.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet fm-search fused-matmul kv-attention build-index
+.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet fm-search fused-matmul kv-attention suffix-array build-index
 
-all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet $(BUILD)/fm_search $(BUILD)/fused_matmul $(BUILD)/fused_kv_attention
+all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet $(BUILD)/fm_search $(BUILD)/fused_matmul $(BUILD)/fused_kv_attention $(BUILD)/suffix_array
 
 $(BUILD)/gpu_access: benchmarks/gpu_access.cu benchmarks/reference_io.h src/cuda/access.cu include/chromofold/chromofold.h
 	@mkdir -p $(BUILD)
@@ -51,6 +51,10 @@ $(BUILD)/fused_matmul: benchmarks/fused_matmul.cu src/cuda/fused_matmul.cu inclu
 $(BUILD)/fused_kv_attention: benchmarks/fused_kv_attention.cu src/cuda/fused_kv_attention.cu include/chromofold/chromofold.h include/chromofold/detail/block_huffman_device.cuh
 	@mkdir -p $(BUILD)
 	$(NVCC) $(NVFLAGS) benchmarks/fused_kv_attention.cu src/cuda/fused_kv_attention.cu -o $@
+
+$(BUILD)/suffix_array: benchmarks/suffix_array.cu src/cuda/suffix_array.cu include/chromofold/detail/suffix_cpu.hpp
+	@mkdir -p $(BUILD)
+	$(NVCC) $(NVFLAGS) benchmarks/suffix_array.cu src/cuda/suffix_array.cu -o $@
 
 # M5: native C++ offline builder (no Warp) — pure g++, no CUDA
 $(BUILD)/build_index: tools/build_index.cpp
@@ -112,6 +116,10 @@ fm-search: $(BUILD)/fm_search
 
 # M5: build the RRR-wavelet index natively in C++ (no Warp), then VERIFY the GPU query kernel is bit-identical to
 # the CPU oracle golden written by the builder — the build≠query split, self-hosted.
+# M5: GPU suffix-array build verified bit-identical to the CPU SA + speedup (no Python)
+suffix-array: $(BUILD)/suffix_array
+	$(BUILD)/suffix_array
+
 build-index: $(BUILD)/build_index $(BUILD)/rrr_wavelet $(BUILD)/fm_search
 	@mkdir -p $(REFS)
 	$(BUILD)/build_index $(REFS)/cpp_V64.cfrw --vocab 64 --fm $(REFS)/cpp_V64.cffm

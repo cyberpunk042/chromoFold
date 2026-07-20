@@ -142,9 +142,18 @@ that `access` reconstructs the BWT) and an honest single-thread baseline.
   (Side note: this run's stream makes 4-grams frequent → 1.25 M occurrences, so GPU locate is well-utilized at
   ~174 ns/occ — confirming M7's caveat that its earlier low-occupancy 0.9–9.7 µs was overhead, not throughput.)
 
+- **GPU suffix-array build (the last host straggler) — ✅ DONE** (`src/cuda/suffix_array.cu`,
+  `benchmarks/suffix_array.cu`, `include/chromofold/detail/suffix_cpu.hpp`). Prefix-doubling on the device, exactly
+  the CPU algorithm parallelised: each round forms a 64-bit composite key `(rank[i]<<32)|(rank[i+k]+1)`, radix-sorts
+  the suffixes by it (thrust `sort_by_key`) and re-ranks by adjacent-key differences (a scan). The SA of a
+  sentinel-terminated string is unique, so the device build is verified **BIT-IDENTICAL** to the CPU SA. **Result
+  (RTX 2080 Ti):** at 2M tokens **21.7–23.3× faster** than the CPU build (1.0 s → 0.05 s) — in the prototype's
+  17–32× range; bit-identical across sizes/vocabs/seeds. Honest scaling: the win grows with n (9.3× at 500K, only
+  2.0× at 100K where launch/allocator overhead dominates). Construction now leaves the CPU.
+
 **Deferred (honest):** AVX2/AVX-512 vectorization of the CPU backend (the RRR decode is data-dependent + gather-heavy,
-so thread-parallelism is the realistic CPU lever — SIMD yield is doubtful, unclaimed), and the CUB-based GPU
-suffix-array build (the SA is still CPU). **Next:** vectorize/parallelize the CPU backend; CUB GPU suffix array.
+so thread-parallelism is the realistic CPU lever — SIMD yield is doubtful, unclaimed). **Next:** wire the GPU SA into
+an nvcc-built builder (the g++ `build_index` still calls the CPU SA); vectorize/parallelize the CPU query backend.
 
 ## M6 — Fused decode-and-consume (the thesis) — ✅ DONE (large-intermediate win; embedding-gather boundary)
 **Goal.** The first fused decode-and-consume kernel (P3): decode token ID → gather embedding row → write
