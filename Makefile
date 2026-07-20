@@ -108,11 +108,13 @@ fm-search: $(BUILD)/fm_search
 
 # M5: build the RRR-wavelet index natively in C++ (no Warp), then VERIFY the GPU query kernel is bit-identical to
 # the CPU oracle golden written by the builder — the build≠query split, self-hosted.
-build-index: $(BUILD)/build_index $(BUILD)/rrr_wavelet
+build-index: $(BUILD)/build_index $(BUILD)/rrr_wavelet $(BUILD)/fm_search
 	@mkdir -p $(REFS)
-	$(BUILD)/build_index $(REFS)/cpp_V64.cfrw --vocab 64
-	@echo "--- GPU query kernel vs the C++ builder's CPU golden ---"
+	$(BUILD)/build_index $(REFS)/cpp_V64.cfrw --vocab 64 --fm $(REFS)/cpp_V64.cffm
+	@echo "--- GPU access/rank kernel vs the C++ builder's CPU oracle golden ---"
 	$(BUILD)/rrr_wavelet $(REFS)/cpp_V64.cfrw
+	@echo "--- GPU FM count/locate vs the C++ builder's CPU oracle golden ---"
+	$(BUILD)/fm_search $(REFS)/cpp_V64.cffm
 
 # M6 (large-intermediate): fused int4 decode-in-GEMM vs decode-then-dense — the memory the fusion buys
 fused-matmul: $(BUILD)/fused_matmul

@@ -133,9 +133,18 @@ that `access` reconstructs the BWT) and an honest single-thread baseline.
   packed 7.88 on this run-heavy stream; H₀ 6.00).
 - **honest CPU baseline (real, not a Python loop):** scalar 1-thread `access` **1371 ns**, `rank` **1245 ns** — so
   the GPU (M4: ~10 ns access, ~6 ns rank) is ~130–200× faster; the CPU path is the correctness oracle, not the
-  throughput path. **Deferred (honest):** AVX2/AVX-512 vectorization of the CPU backend, and the GPU suffix-array
-  build (the SA is still CPU) — both noted, neither claimed. **Next:** vectorize the CPU backend; port the FM
-  pieces (C-table, sampled-SA) into the builder so M7's `.cffm` is Warp-free too; CUB-based GPU suffix array.
+  throughput path. The CPU path is the correctness oracle, not the throughput path.
+- **FM-index too (M7 self-hosted):** the builder now also emits the **`.cffm`** FM-index (C-table + sampled-SA mark
+  plane + `sval`) with a CPU `count`/`locate` oracle (backward search + LF-walk). Self-check: CPU `count` == naive
+  **and** CPU `locate` == naive ✓; cross-check: `build/fm_search` (GPU) on the C++-built `.cffm` is **BIT-IDENTICAL**
+  (count + locate) to the CPU oracle. **The entire searchable-index stack — M4 RRR-wavelet + M7 FM — now builds in
+  native C++ with no Warp anywhere in the build path**, GPU query verified against the CPU oracle end to end.
+  (Side note: this run's stream makes 4-grams frequent → 1.25 M occurrences, so GPU locate is well-utilized at
+  ~174 ns/occ — confirming M7's caveat that its earlier low-occupancy 0.9–9.7 µs was overhead, not throughput.)
+
+**Deferred (honest):** AVX2/AVX-512 vectorization of the CPU backend (the RRR decode is data-dependent + gather-heavy,
+so thread-parallelism is the realistic CPU lever — SIMD yield is doubtful, unclaimed), and the CUB-based GPU
+suffix-array build (the SA is still CPU). **Next:** vectorize/parallelize the CPU backend; CUB GPU suffix array.
 
 ## M6 — Fused decode-and-consume (the thesis) — ✅ DONE (large-intermediate win; embedding-gather boundary)
 **Goal.** The first fused decode-and-consume kernel (P3): decode token ID → gather embedding row → write

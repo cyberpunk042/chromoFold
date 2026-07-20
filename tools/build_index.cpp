@@ -278,6 +278,60 @@ static uint32_t cpu_rank(const RrrWavelet &w, int c, int i) {
   return (uint32_t)(q - p);
 }
 
+// ---- FM-index CPU oracle: C-table + sampled suffix array + backward search (count) + LF-walk (locate) ----
+// packed-plane rank1 (superblock every 8 words), mirrors cf_rank1 in access_device.cuh — for the mark plane.
+static int cpu_packed_rank1(const uint32_t *w, const int32_t *sb, int pos) {
+  int word = pos >> 5, bit = pos & 31, blk = word / 8, r = sb[blk];
+  for (int k = blk * 8; k < word; ++k) r += __builtin_popcount(w[k]);
+  if (bit > 0) r += __builtin_popcount(w[word] & ((1u << bit) - 1u));
+  return r;
+}
+
+struct FmOracle {
+  std::vector<int32_t> C;       // [sigma]
+  std::vector<uint32_t> mwords; // packed sampled-SA mark plane
+  std::vector<int32_t> msb;     // its superblock directory (SB=8)
+  std::vector<int32_t> sval;    // sampled SA values, in SA order
+  int sigma = 0, sa_sample = 0;
+  int64_t N = 0;
+};
+
+static void cpu_backward(const RrrWavelet &w, const FmOracle &fm, const int *pat, int len, int &lo, int &hi) {
+  lo = 0;
+  hi = (int)fm.N;
+  for (int k = 0; k < len; ++k) {
+    int c = pat[len - 1 - k];
+    if (c >= 0 && c < fm.sigma) {
+      if (lo < hi) { lo = fm.C[c] + (int)cpu_rank(w, c, lo); hi = fm.C[c] + (int)cpu_rank(w, c, hi); }
+    } else { lo = 0; hi = 0; }
+  }
+}
+
+static int cpu_locate_one(const RrrWavelet &w, const FmOracle &fm, int p) {
+  int steps = 0;
+  while (!((fm.mwords[p >> 5] >> (p & 31)) & 1u)) {
+    int c = (int)cpu_access(w, p);
+    p = fm.C[c] + (int)cpu_rank(w, c, p);
+    ++steps;
+  }
+  int idx = cpu_packed_rank1(fm.mwords.data(), fm.msb.data(), p);
+  return (int)(((int64_t)fm.sval[idx] + steps) % fm.N);
+}
+
+// ground truth: positions in `seq` (text space) where the original-alphabet pattern occurs.
+static std::vector<int> naive_positions(const std::vector<int64_t> &seq, const std::vector<int> &p) {
+  std::vector<int> out;
+  int m = (int)p.size();
+  int64_t ns = (int64_t)seq.size();
+  if (!m || m > ns) return out;
+  for (int64_t i = 0; i + m <= ns; ++i) {
+    bool ok = true;
+    for (int j = 0; j < m; ++j) if (seq[i + j] != p[j]) { ok = false; break; }
+    if (ok) out.push_back((int)i);
+  }
+  return out;
+}
+
 static void wr(FILE *f, const void *p, size_t bytes) { std::fwrite(p, 1, bytes, f); }
 
 int main(int argc, char **argv) {
@@ -285,6 +339,8 @@ int main(int argc, char **argv) {
   const char *out = argv[1];
   int64_t n = 2000000;
   int vocab = 64, nq = 100000, nr = 100000;
+  int npat = 512, plen = 4, sa_sample = 16;
+  std::string fm_out;
   uint64_t seed = 0;
   for (int i = 2; i + 1 < argc; i += 2) {
     std::string k = argv[i];
@@ -293,6 +349,10 @@ int main(int argc, char **argv) {
     else if (k == "--queries") nq = std::stoi(argv[i + 1]);
     else if (k == "--rank") nr = std::stoi(argv[i + 1]);
     else if (k == "--seed") seed = std::stoull(argv[i + 1]);
+    else if (k == "--fm") fm_out = argv[i + 1];
+    else if (k == "--patterns") npat = std::stoi(argv[i + 1]);
+    else if (k == "--plen") plen = std::stoi(argv[i + 1]);
+    else if (k == "--sa-sample") sa_sample = std::stoi(argv[i + 1]);
   }
   init_tables();
   auto t0 = std::chrono::steady_clock::now();
@@ -382,5 +442,84 @@ int main(int argc, char **argv) {
   std::printf("  CPU backend baseline: access %.1f ns, rank %.1f ns  (scalar, 1 thread)   [sink %llu]\n", acc_ns,
               rnk_ns, (unsigned long long)sink);
   std::printf("  self-check: CPU access == BWT  %s\n", self_ok ? "OK" : "FAIL");
-  return self_ok ? 0 : 3;
+
+  // ---- optional: build the FM-index (.cffm) natively too, with a CPU count/locate oracle (M7 self-hosted) ----
+  bool fm_ok = true;
+  if (!fm_out.empty()) {
+    FmOracle fm;
+    fm.sigma = sigma;
+    fm.sa_sample = sa_sample;
+    fm.N = N;
+    fm.C.assign(sigma, 0);
+    { std::vector<int64_t> cnt(sigma, 0); for (int64_t x : bwt) cnt[x]++; int64_t acc = 0;
+      for (int c = 0; c < sigma; ++c) { fm.C[c] = (int32_t)acc; acc += cnt[c]; } }
+    int nw = (int)((N + 31) / 32), nb = (nw + 7) / 8;
+    fm.mwords.assign(nw, 0);
+    for (int64_t i = 0; i < N; ++i) if (sa[i] % sa_sample == 0) { fm.mwords[i >> 5] |= 1u << (i & 31); fm.sval.push_back(sa[i]); }
+    fm.msb.assign(nb + 1, 0);
+    { std::vector<int64_t> cum(nw + 1, 0); for (int k = 0; k < nw; ++k) cum[k + 1] = cum[k] + __builtin_popcount(fm.mwords[k]);
+      for (int j = 0; j <= nb; ++j) fm.msb[j] = (int32_t)cum[std::min((int64_t)j * 8, (int64_t)nw)]; }  // SB=8
+
+    std::mt19937_64 prng(seed + 777);
+    std::uniform_int_distribution<int64_t> Rpos(0, n - plen);
+    std::uniform_int_distribution<int> Rvoc(0, vocab - 1);
+    std::vector<std::vector<int>> pats;
+    for (int i = 0; i < npat; ++i) { int64_t at = Rpos(prng); std::vector<int> p(plen); for (int j = 0; j < plen; ++j) p[j] = (int)seq[at + j]; pats.push_back(p); }
+    for (int i = 0; i < 16; ++i) { std::vector<int> p(10); for (int j = 0; j < 10; ++j) p[j] = Rvoc(prng); pats.push_back(p); }
+    int P = (int)pats.size();
+    std::vector<int32_t> flat, pstart, plen_arr, locoff(P + 1, 0), locpos;
+    std::vector<uint32_t> cnt_g;
+    for (int i = 0; i < P; ++i) {
+      pstart.push_back((int32_t)flat.size());
+      plen_arr.push_back((int32_t)pats[i].size());
+      for (int x : pats[i]) flat.push_back(x + 1);
+      std::vector<int> gt = naive_positions(seq, pats[i]);  // ground truth
+      cnt_g.push_back((uint32_t)gt.size());
+      int lo, hi;
+      cpu_backward(w, fm, flat.data() + pstart[i], (int)pats[i].size(), lo, hi);
+      if ((int)(hi - lo) != (int)gt.size()) fm_ok = false;   // CPU FM count == naive
+      std::vector<int> got;
+      for (int r = lo; r < hi; ++r) got.push_back(cpu_locate_one(w, fm, r));
+      std::sort(got.begin(), got.end());
+      if (got != gt) fm_ok = false;                         // CPU FM locate == naive
+      for (int x : gt) locpos.push_back(x);
+      locoff[i + 1] = (int32_t)locpos.size();
+    }
+
+    FILE *g = std::fopen(fm_out.c_str(), "wb");
+    if (!g) { std::fprintf(stderr, "cannot open %s\n", fm_out.c_str()); return 1; }
+    uint32_t one = 1, u_bits = bits, u_vocab = vocab, u_sigma = sigma, u_nblocks = (uint32_t)((N + T - 1) / T);
+    uint32_t u_nsb = w.nsb, u_cwords = w.cwords, u_na = w.na, u_owords = (uint32_t)w.offsets.size();
+    uint32_t u_sa = sa_sample, u_mw = (uint32_t)fm.mwords.size(), u_msb = (uint32_t)fm.msb.size();
+    uint32_t u_nsval = (uint32_t)fm.sval.size(), u_npat = (uint32_t)P, u_patflat = (uint32_t)flat.size();
+    uint32_t u_nloc = (uint32_t)locpos.size();
+    uint64_t u_n = (uint64_t)N, u_rrr = (uint64_t)w.rrr_bytes;
+    wr(g, "CFFM", 4);
+    wr(g, &one, 4); wr(g, &u_n, 8); wr(g, &u_bits, 4); wr(g, &u_vocab, 4); wr(g, &u_sigma, 4); wr(g, &u_nblocks, 4);
+    wr(g, &u_nsb, 4); wr(g, &u_cwords, 4); wr(g, &u_na, 4); wr(g, &u_owords, 4); wr(g, &u_sa, 4); wr(g, &u_mw, 4);
+    wr(g, &u_msb, 4); wr(g, &u_nsval, 4); wr(g, &u_npat, 4); wr(g, &u_patflat, 4); wr(g, &u_nloc, 4); wr(g, &u_rrr, 8);
+    wr(g, w.classes.data(), w.classes.size() * 4);
+    wr(g, w.offsets.data(), w.offsets.size() * 4);
+    wr(g, w.rank_a.data(), w.rank_a.size() * 4);
+    wr(g, w.rank_d.data(), w.rank_d.size() * 2);
+    wr(g, w.off_a.data(), w.off_a.size() * 4);
+    wr(g, w.off_d.data(), w.off_d.size() * 2);
+    wr(g, w.offbase.data(), w.offbase.size() * 4);
+    wr(g, w.zeros.data(), w.zeros.size() * 4);
+    wr(g, fm.C.data(), fm.C.size() * 4);
+    wr(g, fm.mwords.data(), fm.mwords.size() * 4);
+    wr(g, fm.msb.data(), fm.msb.size() * 4);
+    wr(g, fm.sval.data(), fm.sval.size() * 4);
+    wr(g, flat.data(), flat.size() * 4);
+    wr(g, pstart.data(), pstart.size() * 4);
+    wr(g, plen_arr.data(), plen_arr.size() * 4);
+    wr(g, cnt_g.data(), cnt_g.size() * 4);
+    wr(g, locoff.data(), locoff.size() * 4);
+    wr(g, locpos.data(), locpos.size() * 4);
+    std::fclose(g);
+    std::printf("built %s  (native C++ FM-index)   patterns=%d  occurrences=%d  sa_sample=%d\n", fm_out.c_str(),
+                P, (int)locpos.size(), sa_sample);
+    std::printf("  self-check: CPU count == naive AND CPU locate == naive  %s\n", fm_ok ? "OK" : "FAIL");
+  }
+  return (self_ok && fm_ok) ? 0 : 3;
 }
