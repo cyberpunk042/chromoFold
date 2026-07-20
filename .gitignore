@@ -64,6 +64,7 @@ compile_commands.json
 *.cfrw
 *.cffm
 *.cffw
+*.cfkv
 
 # vcpkg
 vcpkg_installed/

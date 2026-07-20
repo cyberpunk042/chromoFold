@@ -185,6 +185,30 @@ is that a dense W **reused across many matmuls** amortizes its one decode and be
 (compute-for-memory, P1). This is the positive mirror of the embedding-gather negative: **fuse when the
 intermediate is large.** Next large-intermediate targets: decode + KV-dequant, and RRR-decode + sparse gather.
 
+### M6 large-intermediate #2 — fused KV-dequant attention (the KV-path, M9 prep) — ✅ DONE
+**Delivered (`src/cuda/fused_kv_attention.cu`, `benchmarks/fused_kv_attention.cu`, `tools/export_kv_attention.py`).**
+The KV-cache instance of the fusion thesis — the long-context memory bottleneck. K,V are **KIVI per-axis-quantized**
+(K per-channel, V per-token, arXiv 2402.02750) then **block-Huffman entropy-coded**; a causal-windowed attention
+kernel decodes + dequantizes each attended K/V row **inside** the attention (Q·Kᵀ → softmax → ·V, one thread per
+query, two passes over its window), so the dense dequantized K/V tiles **never materialise** — only the compressed
+KV store is resident, and only the *windowed* positions are ever decoded (the light/sparse-consumer branch).
+Reuses the header-only `cf_bh_decode_at`. A decode-then-dense reference uses identical float ops in the same order.
+
+**Result (RTX 2080 Ti, int4, block=64), fused BIT-IDENTICAL to decode-then-dense; vs numpy golden rel ~1e-7:**
+| K,V (int4) | window | resident (compressed KV) | dense (dequant K+V) | less VRAM | fused | dense |
+|---|---|---|---|---|---|---|
+| 4096×64 | 256 | 0.27 MB | 2.10 MB | **7.7×** | 10.3 ms | 2.5 ms |
+| 8192×128 | 512 | 1.02 MB | 8.39 MB | **8.3×** | 57.2 ms | 21.1 ms |
+
+Fusion is **numerically free** (bit-identical). **The honest trade here is the pure compute-for-memory one (P1):**
+`dim` is a multiple of `block`, so the row skip-decode is zero — the fused path is slower *only* because it
+re-decodes each attended K/V row per query with no dense cache (total fused decodes ≈ nq·window vs the dense
+path's one-pass seq decodes), while the small dense tile (2–8 MB) stays cached. So **the win is KV capacity — fit a
+longer context / more layers in the same VRAM (7.7–8.3× less resident KV) — not speed at these sizes.** It flips
+toward fusion when the dense KV tile is too large to cache (very long context × layers, bandwidth-bound) or the
+attention is genuinely sparse (few attended positions ⇒ decode is cheap vs materializing the whole tile). This is
+the concrete KV brick for **M9** (wire into a real KV path and measure batch/context at equal VRAM).
+
 ## M7 — FM backward-search + locate on GPU — ✅ DONE (count + locate, over the RRR index)
 **Goal.** Port `count`/`locate` (backward search over the RRR/BWT wavelet). The Warp prototype already builds the
 suffix array on-GPU (17–32× CPU) and does GPU count/locate/predict_next.
