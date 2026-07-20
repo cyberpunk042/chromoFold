@@ -23,15 +23,6 @@
     }                                                                                                          \
   } while (0)
 
-extern "C" cf_status cf_kv_attn_fused_async(const uint32_t *, const int32_t *, const int32_t *, int,
-                                            const uint32_t *, const int32_t *, const int32_t *, int, const float *,
-                                            const float *, const float *, float *, int, int, int, int, int, int,
-                                            float, void *);
-extern "C" cf_status cf_kv_attn_dense_async(const uint32_t *, const int32_t *, const int32_t *, int,
-                                            const uint32_t *, const int32_t *, const int32_t *, int, const float *,
-                                            const float *, const float *, float *, float *, float *, int, int, int,
-                                            int, int, int, float, void *);
-
 struct Kv {
   uint64_t resident = 0, dense = 0;
   uint32_t seq = 0, dim = 0, nq = 0, window = 0, bits = 0, block = 0, zero = 0;
