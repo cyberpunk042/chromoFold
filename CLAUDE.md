@@ -51,14 +51,16 @@ lesson** — do not bury or spin it.
 | M4 RRR rank1 (entropy frontier) | ✅ | bit-identical; skewed **2.2–2.8× below packed**, ~0.7 ns |
 | M4 RRR-backed wavelet access/rank | ✅ | bit-identical; BWT **5.80 b/tok < H₀**, 1.25–1.36× smaller; ~10 ns (RRR-decode price) |
 | M7 FM count + locate (over RRR index) | ✅ | bit-identical to ground truth; count **~19 M patterns/s**, GPU-resident locate |
-| M6 fused decode+embedding-gather | ◐ | built, bit-identical; **honest negative** (fuse only large-intermediate) |
+| M6 fused decode-in-GEMM (large-intermediate) | ✅ | bit-exact to golden; **10.6× less VRAM**, faster at 4096² (positive case) |
+| M6 fused embedding-gather (small-intermediate) | ◐ | built, bit-identical; **honest negative** (fuse only large-intermediate) |
 | M5 C++ builder + AVX CPU · Rust · PTX | ☐ | not started |
 
 **Next:** RRR is wired under the wavelet levels (M4, 5.80 b/tok on the BWT) **and** FM backward-search rides on it
 (M7: `cf_fm_count_async`/`cf_fm_ranges_async`/`cf_fm_locate_async`, count + locate bit-identical to ground truth,
 ~19 M patterns/s). The compact index is now decoded, searched, and sampled from without leaving VRAM. Remaining:
 M5 (C++ builder + GPU suffix-array + CPU backend — the last host straggler), a locate-throughput sweep, pybind11,
-and the large-intermediate fused op (RRR-decode + sparse gather / KV-dequant), which the RRR-wavelet unlocks.
+and more large-intermediate fused ops (KV-dequant, RRR-decode + sparse gather) reusing `cf_bh_decode_at`. The
+first large-intermediate fusion (int4 decode-in-GEMM, M6) now lands: **10.6× less VRAM**, bit-exact, faster at 4096².
 
 ## Build & run
 
@@ -80,10 +82,11 @@ include/chromofold/chromofold.h            the stable C ABI (cf_wavelet_view, cf
 include/chromofold/detail/access_device.cuh  device-side packed-wavelet decode (shared by access + fused kernels)
 include/chromofold/detail/rrr_wavelet_device.cuh  device-side RRR-backed wavelet decode (cf_rrrw_view + access/rank)
 include/chromofold/detail/fm_search_device.cuh  device-side FM backward-search + LF-walk locate (cf_fm_view)
-src/cuda/{access,rank,rrr,rrr_wavelet,fm_search,fused_embedding}.cu  the CUDA kernels
-benchmarks/{gpu_access,frontier,rank_bench,rrr_bench,rrr_wavelet,fm_search,fused_embedding}.cu  verify + measure
+include/chromofold/detail/block_huffman_device.cuh  device-side LUT decode-at-bit (feeds fused decode-in-GEMM)
+src/cuda/{access,rank,rrr,rrr_wavelet,fm_search,fused_embedding,fused_matmul}.cu  the CUDA kernels
+benchmarks/{gpu_access,frontier,rank_bench,rrr_bench,rrr_wavelet,fm_search,fused_embedding,fused_matmul}.cu  verify + measure
 benchmarks/reference_io.h                  the .cfwv v3 loader (shared)
-tools/{export_reference,export_rrr,export_rrr_wavelet,export_fm_index}.py  freeze Warp golden vectors
+tools/{export_reference,export_rrr,export_rrr_wavelet,export_fm_index,export_fused_matmul}.py  freeze Warp golden
 specs/                                     the SDD document set (constitution → roadmap → porting map)
 ```
 

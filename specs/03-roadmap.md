@@ -120,7 +120,7 @@ correctness oracle and honest CPU baseline (§9). Establishes the build ≠ quer
 **Acceptance.** CPU backend matches GPU bit-for-bit on a fuzz corpus; CPU `access`/`rank` throughput reported as
 a real baseline (not a Python loop); builder round-trips the on-device format.
 
-## M6 — Fused `access` + embedding gather (the thesis) — ◐ built + measured; honest boundary found
+## M6 — Fused decode-and-consume (the thesis) — ✅ DONE (large-intermediate win; embedding-gather boundary)
 **Goal.** The first fused decode-and-consume kernel (P3): decode token ID → gather embedding row → write
 embedding, with **no decompressed token buffer** (Experiment D).
 **Delivered (`src/cuda/fused_embedding.cu`, `benchmarks/fused_embedding.cu`).** Two fused mappings, both
@@ -134,8 +134,30 @@ which the unfused two-kernel path satisfies independently. And embedding gather'
 the prototype's decode-in-matmul avoids materializing the full dequantized weight matrix (**10.6× less VRAM**) —
 **or the consumer is LIGHT/SPARSE** (KV-page selection, sparse gather, FM-candidate retrieval). *Fuse by how
 expensive the intermediate is, not by fusing everything.* Embedding gather was the wrong showcase.
-**Next.** Re-target the fused demonstration at a large-intermediate op: **decode + KV-dequant** (avoids a big
-dequantized KV tile) or **RRR-decode + sparse gather**. This is where fusion's memory win is real.
+### M6 large-intermediate re-target — fused int4 decode-in-GEMM (the positive case) — ✅ DONE
+**Delivered (`src/cuda/fused_matmul.cu`, `include/chromofold/detail/block_huffman_device.cuh`,
+`benchmarks/fused_matmul.cu`).** The op the boundary above pointed to: decode block-Huffman int4 weights **inside**
+the GEMM (one thread per output column decodes W's row from the compressed stream and multiply-accumulates it), so
+the dequantized (M×K) matrix **never exists in VRAM** — only the compressed store is resident during compute (P3).
+Faithful port of the prototype's `FusedDecodeMatmul`; new `.cffw` v1 reference freezes the store + input + golden.
+The shared `cf_bh_decode_at` LUT decode (DFloat11-style, one table hit → symbol + length) is header-only, so the
+same inline decode feeds future fused ops (KV-dequant, sparse gather).
+
+**Result (RTX 2080 Ti, int4, block=64, batch=8), fused BIT-IDENTICAL to decode-then-dense AND bit-exact to the
+Warp golden (`rel = 0`):**
+| W (int4) | resident (compressed) | dense (dequantized) | less VRAM | fused | dense (decode+GEMM) |
+|---|---|---|---|---|---|
+| 2048×2048 | 1.58 MB | 16.78 MB | **10.6×** | 4.42 ms | 2.42 ms |
+| 4096×4096 | 6.30 MB | 67.11 MB | **10.6×** | 6.02 ms | 7.92 ms |
+
+Reproduces the prototype's **10.6× less VRAM** headline. Fusion is **numerically free** (bit-identical to
+materializing W). **The richer, honest finding on speed:** at 2048² fused is ~1.8× *slower* (the inline decode
+serializes on the compute path), but at **4096² fused is ~1.3× *faster*** — the dense path's 67 MB intermediate
+roundtrip (decode→write 67 MB→read 67 MB in the GEMM) dominates, and fusion eliminates it. So for a
+**large-intermediate, memory-bound, single-use** matmul, fusion wins **memory *and* latency**; the standing caveat
+is that a dense W **reused across many matmuls** amortizes its one decode and beats the fused path's re-decode
+(compute-for-memory, P1). This is the positive mirror of the embedding-gather negative: **fuse when the
+intermediate is large.** Next large-intermediate targets: decode + KV-dequant, and RRR-decode + sparse gather.
 
 ## M7 — FM backward-search + locate on GPU — ✅ DONE (count + locate, over the RRR index)
 **Goal.** Port `count`/`locate` (backward search over the RRR/BWT wavelet). The Warp prototype already builds the

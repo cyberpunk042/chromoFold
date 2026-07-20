@@ -11,9 +11,9 @@ BUILD = build
 REFS  = benchmarks/refs
 VOCABS = 4 16 256 32768 65536 131072
 
-.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet fm-search
+.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet fm-search fused-matmul
 
-all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet $(BUILD)/fm_search
+all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet $(BUILD)/fm_search $(BUILD)/fused_matmul
 
 $(BUILD)/gpu_access: benchmarks/gpu_access.cu benchmarks/reference_io.h src/cuda/access.cu include/chromofold/chromofold.h
 	@mkdir -p $(BUILD)
@@ -42,6 +42,10 @@ $(BUILD)/rrr_wavelet: benchmarks/rrr_wavelet.cu src/cuda/rrr_wavelet.cu include/
 $(BUILD)/fm_search: benchmarks/fm_search.cu src/cuda/fm_search.cu include/chromofold/detail/fm_search_device.cuh include/chromofold/detail/rrr_wavelet_device.cuh include/chromofold/detail/access_device.cuh
 	@mkdir -p $(BUILD)
 	$(NVCC) $(NVFLAGS) benchmarks/fm_search.cu src/cuda/fm_search.cu -o $@
+
+$(BUILD)/fused_matmul: benchmarks/fused_matmul.cu src/cuda/fused_matmul.cu include/chromofold/chromofold.h include/chromofold/detail/block_huffman_device.cuh
+	@mkdir -p $(BUILD)
+	$(NVCC) $(NVFLAGS) benchmarks/fused_matmul.cu src/cuda/fused_matmul.cu -o $@
 
 # M1: freeze the default reference vector and verify the CUDA access kernel against it
 reference: tools/export_reference.py
@@ -95,6 +99,13 @@ fm-search: $(BUILD)/fm_search
 	  test -f $(REFS)/fm_V$$v.cffm || $(PYTHON) tools/export_fm_index.py $(REFS)/fm_V$$v.cffm --vocab $$v >/dev/null; \
 	done
 	$(BUILD)/fm_search $(REFS)/fm_V64.cffm $(REFS)/fm_V256.cffm
+
+# M6 (large-intermediate): fused int4 decode-in-GEMM vs decode-then-dense — the memory the fusion buys
+fused-matmul: $(BUILD)/fused_matmul
+	@mkdir -p $(REFS)
+	@test -f $(REFS)/fw_2048.cffw || $(PYTHON) tools/export_fused_matmul.py $(REFS)/fw_2048.cffw --m 2048 --k 2048 >/dev/null
+	@test -f $(REFS)/fw_4096.cffw || $(PYTHON) tools/export_fused_matmul.py $(REFS)/fw_4096.cffw --m 4096 --k 4096 >/dev/null
+	$(BUILD)/fused_matmul $(REFS)/fw_2048.cffw $(REFS)/fw_4096.cffw
 
 # M6: fused decode+embedding-gather vs unfused (Experiment D). Reuses the V=32768 reference.
 fused: $(BUILD)/fused_embedding
