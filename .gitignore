@@ -58,8 +58,10 @@ compile_commands.json
 *.bak
 *.swp
 
-# frozen reference vectors (regenerate with `make reference`)
+# frozen reference vectors (regenerate with `make reference` / `rrr` / `rrr-wavelet`)
 *.cfwv
+*.cfrr
+*.cfrw
 
 # vcpkg
 vcpkg_installed/

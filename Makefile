@@ -11,9 +11,9 @@ BUILD = build
 REFS  = benchmarks/refs
 VOCABS = 4 16 256 32768 65536 131072
 
-.PHONY: all clean bench frontier reference experiment-a fused rank rrr
+.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet
 
-all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench
+all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet
 
 $(BUILD)/gpu_access: benchmarks/gpu_access.cu benchmarks/reference_io.h src/cuda/access.cu include/chromofold/chromofold.h
 	@mkdir -p $(BUILD)
@@ -34,6 +34,10 @@ $(BUILD)/rank_bench: benchmarks/rank_bench.cu benchmarks/reference_io.h src/cuda
 $(BUILD)/rrr_bench: benchmarks/rrr_bench.cu src/cuda/rrr.cu include/chromofold/chromofold.h
 	@mkdir -p $(BUILD)
 	$(NVCC) $(NVFLAGS) benchmarks/rrr_bench.cu src/cuda/rrr.cu -o $@
+
+$(BUILD)/rrr_wavelet: benchmarks/rrr_wavelet.cu src/cuda/rrr_wavelet.cu include/chromofold/chromofold.h include/chromofold/detail/rrr_wavelet_device.cuh
+	@mkdir -p $(BUILD)
+	$(NVCC) $(NVFLAGS) benchmarks/rrr_wavelet.cu src/cuda/rrr_wavelet.cu -o $@
 
 # M1: freeze the default reference vector and verify the CUDA access kernel against it
 reference: tools/export_reference.py
@@ -69,6 +73,15 @@ rrr: $(BUILD)/rrr_bench
 	  test -f $(REFS)/rrr_$$d.cfrr || $(PYTHON) tools/export_rrr.py $(REFS)/rrr_$$d.cfrr --density $$d >/dev/null; \
 	done
 	$(BUILD)/rrr_bench $(REFS)/rrr_0.5.cfrr $(REFS)/rrr_0.1.cfrr $(REFS)/rrr_0.03.cfrr $(REFS)/rrr_0.005.cfrr
+
+# M4 (wavelet wiring): RRR-backed wavelet access+rank on a BWT'd stream — verify vs golden + entropy-size win
+RRW_VOCABS = 64 256
+rrr-wavelet: $(BUILD)/rrr_wavelet
+	@mkdir -p $(REFS)
+	@for v in $(RRW_VOCABS); do \
+	  test -f $(REFS)/rrw_V$$v.cfrw || $(PYTHON) tools/export_rrr_wavelet.py $(REFS)/rrw_V$$v.cfrw --vocab $$v >/dev/null; \
+	done
+	$(BUILD)/rrr_wavelet $(REFS)/rrw_V64.cfrw $(REFS)/rrw_V256.cfrw
 
 # M6: fused decode+embedding-gather vs unfused (Experiment D). Reuses the V=32768 reference.
 fused: $(BUILD)/fused_embedding

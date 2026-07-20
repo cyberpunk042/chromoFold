@@ -49,12 +49,14 @@ lesson** — do not bury or spin it.
 | M2 frontier (raw gather vs wavelet) | ◐ | price-of-addressability measured; pybind11 remains |
 | M3 CUDA `rank` + two-level directory | ✅ | bit-identical; two-level **1.6–1.8× faster** |
 | M4 RRR rank1 (entropy frontier) | ✅ | bit-identical; skewed **2.2–2.8× below packed**, ~0.7 ns |
+| M4 RRR-backed wavelet access/rank | ✅ | bit-identical; BWT **5.80 b/tok < H₀**, 1.25–1.36× smaller; ~10 ns (RRR-decode price) |
 | M6 fused decode+embedding-gather | ◐ | built, bit-identical; **honest negative** (fuse only large-intermediate) |
 | M5 C++ builder + AVX CPU · M7 FM-search · Rust · PTX | ☐ | not started |
 
-**Next:** wire RRR under the wavelet levels (+ two-level superblocks) → a natively entropy-sized searchable
-index; then M5 (C++ builder + CPU backend), M7 (FM backward-search `count`/`locate`), pybind11. The
-large-intermediate fused op (decode + sparse gather / KV-dequant) becomes buildable once RRR-wavelet lands.
+**Next:** RRR is now wired under the wavelet levels (+ two-level superblocks) — a natively entropy-sized searchable
+index (`cf_rrrw_access_async`/`cf_rrrw_rank_async`, bit-identical, 5.80 b/tok on the BWT). Remaining: M7 (FM
+backward-search `count`/`locate` over the `cf_rrrw_*` index), M5 (C++ builder + CPU backend), pybind11, and the
+large-intermediate fused op (RRR-decode + sparse gather / KV-dequant), which the RRR-wavelet now unlocks.
 
 ## Build & run
 
@@ -73,11 +75,12 @@ make PYTHON=~/warp-solar-system-shaders/.venv/bin/python fused          # M6 fus
 
 ```
 include/chromofold/chromofold.h            the stable C ABI (cf_wavelet_view, cf_access_async, cf_rank_async, ...)
-include/chromofold/detail/access_device.cuh  device-side wavelet decode (shared by access + fused kernels)
-src/cuda/{access,rank,rrr,fused_embedding}.cu  the CUDA kernels
-benchmarks/{gpu_access,frontier,rank_bench,rrr_bench,fused_embedding}.cu  verify + measure vs the frozen golden
+include/chromofold/detail/access_device.cuh  device-side packed-wavelet decode (shared by access + fused kernels)
+include/chromofold/detail/rrr_wavelet_device.cuh  device-side RRR-backed wavelet decode (cf_rrrw_view + access/rank)
+src/cuda/{access,rank,rrr,rrr_wavelet,fused_embedding}.cu  the CUDA kernels
+benchmarks/{gpu_access,frontier,rank_bench,rrr_bench,rrr_wavelet,fused_embedding}.cu  verify + measure vs the golden
 benchmarks/reference_io.h                  the .cfwv v3 loader (shared)
-tools/{export_reference,export_rrr}.py     freeze Warp golden vectors (import warp_compress from the prototype)
+tools/{export_reference,export_rrr,export_rrr_wavelet}.py  freeze Warp golden vectors (import warp_compress)
 specs/                                     the SDD document set (constitution → roadmap → porting map)
 ```
 

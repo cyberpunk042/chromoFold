@@ -68,7 +68,7 @@ the *total* index (the bitplane dominates at 4 B/word), a clear trade for a quer
 per-deployment knob (P9). Needed an `nwords+1` fine-array sentinel (a query at pos=n hits word=nwords). Next:
 wire the two-level layout into `cf_access` too, and add the RRR-coded frontier (M4).
 
-## M4 — RRR-coded bitplanes on GPU — ✅ DONE (rank1; wavelet-level wiring next)
+## M4 — RRR-coded bitplanes on GPU — ✅ DONE (rank1 **and** RRR-backed wavelet access/rank)
 **Goal.** Port RRR rank/decode so the resident index reaches the entropy frontier (the Warp prototype hit
 5.80 b/tok on a BWT, below H₀).
 **Delivered (`src/cuda/rrr.cu`, `benchmarks/rrr_bench.cu`).** Faithful CUDA port of the RRR bitvector rank1:
@@ -87,8 +87,32 @@ golden at every density.**
 Skewed planes compress **2.2–2.8× below packed** (toward H₀) while rank1 stays **~0.7 ns** — the combinatorial
 decode is nearly free and *faster* on skewed planes (smaller offset widths). Honest bound: on max-entropy planes
 RRR is *bigger* than packed (1.167 b/bit) — keep those packed. This is the BWT's profile (skewed → RRR wins),
-the memory the FM-index rides on. **Next:** wire RRR under the wavelet levels + add the two-level superblock
-encoding; this also unlocks the large-intermediate fused op M6 wants (decode + sparse gather / KV-dequant).
+the memory the FM-index rides on.
+
+### M4 wavelet wiring — RRR *under* the wavelet levels (the entropy-sized searchable self-index) — ✅ DONE
+**Delivered (`src/cuda/rrr_wavelet.cu`, `include/chromofold/detail/rrr_wavelet_device.cuh`,
+`benchmarks/rrr_wavelet.cu`).** Every wavelet level is now an **RRR bitvector with two-level superblock samples**
+(int32 anchor per K=32 superblocks + uint16 delta — M3's directory composed with M4's RRR). `cf_rrrw_access_async`
+/ `cf_rrrw_rank_async` walk the levels doing, per level, a superblock jump + short class scan + **one combinatorial
+in-register block decode**; `access` reads each level's bit as `rank1(i+1) − rank1(i)` (reusing the decode path).
+Faithful port of the prototype's `RRRWaveletGPU`; new `.cfrw` v1 reference format frozen from a **BWT'd order-1
+Markov stream** (the skewed regime where RRR wins). Device inlines are header-only so a token can be decoded
+in-register inside a future fused consumer (P3).
+
+**Result (RTX 2080 Ti, 2M-token BWT, 100K access + 100K rank queries), both BIT-IDENTICAL to the Warp golden:**
+| vocab | levels | RRR b/tok | packed b/tok | smaller | access | rank |
+|---|---|---|---|---|---|---|
+| 64 | 7 | **5.80** (H₀ 5.96) | 7.88 | 1.36× | 9.67 ns | 6.90 ns |
+| 256 | 9 | **8.09** | 10.13 | 1.25× | 12.12 ns | 9.07 ns |
+
+Reproduces the prototype's headline (**5.80 b/tok on the BWT, below H₀**) exactly. **The honest price:** the
+in-register RRR decode makes access ~12–15× slower than the packed wavelet (M1 ~0.8 ns) and rank ~10× slower than
+the two-level packed rank (M3 ~0.45 ns) — access pays for two rank1 decodes per level. The trade is memory **and
+capability**: a searchable index 1.25–1.36× smaller, reaching below H₀, still fully GPU-resident. This is the
+compact BWT self-index M7's FM-search rides on. **Next:** M7 FM backward-search (`count`/`locate`) over this
+`cf_rrrw_*` index; and the large-intermediate fused op M6 wants (RRR-decode + sparse gather / KV-dequant), which
+this unlocks. A possible access speedup — read the level bit directly (one decode) instead of two rank1 calls —
+is left as a benchmark-gated optimization.
 
 ## M5 — C++ builder + optimized CPU verifier
 **Goal.** A C++20 offline builder (suffix array, BWT, RRR, serialization) and an AVX2/AVX-512 CPU backend as the
