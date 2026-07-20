@@ -297,11 +297,27 @@ batch (deferred). count, batched to 200K patterns, is the well-utilized figure. 
 batched count over candidate next-tokens (host-side today); a locate-throughput sweep; and GPU suffix-array build
 (M5) to close the last host straggler.
 
-## M8 — Reference-delta apply + shared-prefix serving demo
+## M8 — Reference-delta apply + shared-prefix serving demo — ◐ delta-apply + dedup DONE (runtime metrics need M9)
 **Goal.** Port delta-apply; build the shared-prefix prompt-cache demonstration (Experiment B: N requests, one
 big shared prefix, unique suffixes) — the naturally-redundant serving workload.
 **Acceptance.** Resident + peak transient memory, TTFT/prefill, and max batch at fixed memory budget vs
 duplicated and content-addressed storage; cost to add one suffix/turn recorded.
+**Delivered (`src/cuda/delta_apply.cu`, `benchmarks/delta_bench.cu`, `tools/export_delta.py` — Warp-free).** The
+reference/delta cluster decode: a cluster of near-identical sequences (shared prompt prefix / conversation
+history / LoRA-library / near-duplicate contexts) stored as **one base + per-member sparse deltas**; batched
+`fetch(leaf, pos)` reconstructs each token as `base[pos]` overridden by a **binary search** over that member's
+sorted deltas — partial unfold of a compressed cluster, in VRAM. Faithful flat port of `gpu_delta._fetch_k`; the
+golden is the original sequences themselves (no Warp needed).
+**Result (RTX 2080 Ti, 256 members × (base 8000 + suffix 64) = 2.06 M tokens, 1% divergence):**
+- **reconstruct BIT-IDENTICAL** to the golden originals (all 2,064,384 tokens); random-access fetch **6.1 G tok/s**.
+- **resident 329 KB (base + sparse deltas) vs 8.26 MB duplicated → 25.1× less VRAM** — the shared reference stored
+  once, amortised across the batch (cross-sequence dedup, P2/P10).
+- **cost to add one turn:** +512 B (the new suffix as deltas) vs +32 KB (a duplicated full copy) → **63× cheaper
+  per turn**, no base recopy.
+**Honest caveats:** sparse `(pos,val)` deltas cost **8 B/token**, so a long *contiguous* suffix is better stored
+as a plain array than as deltas (the win here is the shared prefix, not the suffix coding); and the acceptance's
+**TTFT / prefill / max-batch-at-fixed-budget** numbers need a real serving runtime — that is the M9 integration,
+env-gated here. What is proven is the memory model (resident + per-turn cost) and bit-exact reconstruction.
 
 ## M9 — Integrate with one real inference path (the ship criterion, P10)
 **Goal.** Wire the KV path into one real runtime (start with the `transformers` `Cache` adapter already built;
