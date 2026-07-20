@@ -114,11 +114,28 @@ compact BWT self-index M7's FM-search rides on. **Next:** M7 FM backward-search 
 this unlocks. A possible access speedup — read the level bit directly (one decode) instead of two rank1 calls —
 is left as a benchmark-gated optimization.
 
-## M5 — C++ builder + optimized CPU verifier
+## M5 — C++ builder + CPU verifier — ◐ builder + scalar CPU oracle DONE (AVX + GPU-SA build next)
 **Goal.** A C++20 offline builder (suffix array, BWT, RRR, serialization) and an AVX2/AVX-512 CPU backend as the
 correctness oracle and honest CPU baseline (§9). Establishes the build ≠ query split (P9).
 **Acceptance.** CPU backend matches GPU bit-for-bit on a fuzz corpus; CPU `access`/`rank` throughput reported as
 a real baseline (not a Python loop); builder round-trips the on-device format.
+**Delivered (`tools/build_index.cpp`, one self-contained C++20 translation unit, **no Warp/Python**).** A pure-CPU
+offline builder: structured stream → suffix array (prefix-doubling) → BWT → RRR-wavelet (per-level `rrr_encode` +
+two-level superblock samples, faithful CPU ports of `gpu_rrr`) → serialised to the **exact `.cfrw` v1 format** the
+GPU kernels consume. A scalar CPU `access`/`rank` backend is both the oracle (computes the golden and self-checks
+that `access` reconstructs the BWT) and an honest single-thread baseline.
+**Result (RTX 2080 Ti host, 2M-token BWT, structured stream):**
+- **self-check:** CPU `access` == BWT ✓ (the builder validates its own encode).
+- **cross-check (the acceptance test):** feed the C++-built `.cfrw` to `build/rrr_wavelet` (GPU) → GPU `access` and
+  `rank` **BIT-IDENTICAL** to the CPU oracle golden. The whole pipeline — build (C++), query (CUDA), oracle (C++)
+  — agrees bit-for-bit with **the Warp prototype removed from the build path.**
+- **build cost (offline, P9):** suffix array 1.2 s + RRR encode 0.1 s. Index 0.92 MB (**3.67 b/tok**, 2.15× below
+  packed 7.88 on this run-heavy stream; H₀ 6.00).
+- **honest CPU baseline (real, not a Python loop):** scalar 1-thread `access` **1371 ns**, `rank` **1245 ns** — so
+  the GPU (M4: ~10 ns access, ~6 ns rank) is ~130–200× faster; the CPU path is the correctness oracle, not the
+  throughput path. **Deferred (honest):** AVX2/AVX-512 vectorization of the CPU backend, and the GPU suffix-array
+  build (the SA is still CPU) — both noted, neither claimed. **Next:** vectorize the CPU backend; port the FM
+  pieces (C-table, sampled-SA) into the builder so M7's `.cffm` is Warp-free too; CUB-based GPU suffix array.
 
 ## M6 — Fused decode-and-consume (the thesis) — ✅ DONE (large-intermediate win; embedding-gather boundary)
 **Goal.** The first fused decode-and-consume kernel (P3): decode token ID → gather embedding row → write

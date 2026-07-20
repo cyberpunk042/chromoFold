@@ -3,6 +3,7 @@
 
 ARCH   ?= sm_75
 NVCC   ?= nvcc
+CXX    ?= g++
 PYTHON ?= python
 CXXSTD ?= c++17
 NVFLAGS = -O3 -std=$(CXXSTD) -arch=$(ARCH) -Iinclude -Ibenchmarks --expt-relaxed-constexpr -lineinfo
@@ -11,7 +12,7 @@ BUILD = build
 REFS  = benchmarks/refs
 VOCABS = 4 16 256 32768 65536 131072
 
-.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet fm-search fused-matmul
+.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet fm-search fused-matmul build-index
 
 all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet $(BUILD)/fm_search $(BUILD)/fused_matmul
 
@@ -46,6 +47,11 @@ $(BUILD)/fm_search: benchmarks/fm_search.cu src/cuda/fm_search.cu include/chromo
 $(BUILD)/fused_matmul: benchmarks/fused_matmul.cu src/cuda/fused_matmul.cu include/chromofold/chromofold.h include/chromofold/detail/block_huffman_device.cuh
 	@mkdir -p $(BUILD)
 	$(NVCC) $(NVFLAGS) benchmarks/fused_matmul.cu src/cuda/fused_matmul.cu -o $@
+
+# M5: native C++ offline builder (no Warp) — pure g++, no CUDA
+$(BUILD)/build_index: tools/build_index.cpp
+	@mkdir -p $(BUILD)
+	$(CXX) -O3 -std=$(CXXSTD) -march=native tools/build_index.cpp -o $@
 
 # M1: freeze the default reference vector and verify the CUDA access kernel against it
 reference: tools/export_reference.py
@@ -99,6 +105,14 @@ fm-search: $(BUILD)/fm_search
 	  test -f $(REFS)/fm_V$$v.cffm || $(PYTHON) tools/export_fm_index.py $(REFS)/fm_V$$v.cffm --vocab $$v >/dev/null; \
 	done
 	$(BUILD)/fm_search $(REFS)/fm_V64.cffm $(REFS)/fm_V256.cffm
+
+# M5: build the RRR-wavelet index natively in C++ (no Warp), then VERIFY the GPU query kernel is bit-identical to
+# the CPU oracle golden written by the builder — the build≠query split, self-hosted.
+build-index: $(BUILD)/build_index $(BUILD)/rrr_wavelet
+	@mkdir -p $(REFS)
+	$(BUILD)/build_index $(REFS)/cpp_V64.cfrw --vocab 64
+	@echo "--- GPU query kernel vs the C++ builder's CPU golden ---"
+	$(BUILD)/rrr_wavelet $(REFS)/cpp_V64.cfrw
 
 # M6 (large-intermediate): fused int4 decode-in-GEMM vs decode-then-dense — the memory the fusion buys
 fused-matmul: $(BUILD)/fused_matmul
