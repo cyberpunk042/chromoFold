@@ -240,6 +240,32 @@ toward fusion when the dense KV tile is too large to cache (very long context ×
 attention is genuinely sparse (few attended positions ⇒ decode is cheap vs materializing the whole tile). This is
 the concrete KV brick for **M9** (wire into a real KV path and measure batch/context at equal VRAM).
 
+### M6 sparse-consumer branch — fused decode + sparse gather (P2 in numbers) — ✅ DONE
+**Delivered (`src/cuda/sparse_gather.cu`, `benchmarks/sparse_gather.cu`, `tools/export_sparse_gather.py`).** The
+*other* branch of the fusion thesis — the light/sparse consumer — and a direct measurement of **P2 (navigable
+while compressed)**. When a consumer touches only K of N positions (sparse/windowed/retrieval attention, KV-page
+selection, FM-candidate retrieval), the fused kernel decodes each touched token id from the compressed RRR-wavelet
+and gathers its embedding row inline (`cf_rrrw_access_one` + gather), so the N-length decoded sequence never
+exists; the decompress-all baseline reconstructs every id into a buffer, then gathers K rows. New `.cfsg` v1
+reference. Fused sparse gather is **BIT-IDENTICAL** to both the frozen golden and the decompress-all path.
+
+**Result (RTX 2080 Ti, n=1M int tokens, dim=64, RRR index 1.13 MB), fused vs decompress-all-then-gather:**
+| K / N touched | fused | decompress-all | speedup |
+|---|---|---|---|
+| 0.1% | 0.24 ms | 6.56 ms | **27.7×** |
+| 1% | 0.21 ms | 5.51 ms | 26.7× |
+| 10% | 0.99 ms | 7.76 ms | 7.9× |
+| 50% | 4.95 ms | 16.5 ms | 3.3× |
+| 100% | 11.6 ms | 27.1 ms | 2.3× |
+
+The sparse win scales ~N/K (27.7× at 0.1%), the succinct-structure payoff: random access without decompressing all.
+It stays ahead even at K=N (2.3×) because fusion also skips the N-length id-buffer round trip. **Honest scope (the
+important caveat):** this baseline reconstructs via the *same per-element wavelet walk*, so it is the worst dense
+option — a genuinely dense whole-tensor decode should use the **M4 bulk block-coder (block-Huffman / rANS, 12–21×
+faster than the wavelet)**, which would beat per-element walks as K→N. So the measured statement is: **over the
+searchable index, fuse+sparse when you touch a fraction; switch to the bulk coder when you need it all.** This
+completes M6's thesis — fuse when the intermediate is large *or* the consumer is sparse.
+
 ## M7 — FM backward-search + locate on GPU — ✅ DONE (count + locate, over the RRR index)
 **Goal.** Port `count`/`locate` (backward search over the RRR/BWT wavelet). The Warp prototype already builds the
 suffix array on-GPU (17–32× CPU) and does GPU count/locate/predict_next.

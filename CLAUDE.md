@@ -54,6 +54,7 @@ lesson** — do not bury or spin it.
 | M7 FM count + locate (over RRR index) | ✅ | bit-identical to ground truth; count **~19 M patterns/s**, GPU-resident locate |
 | M6 fused decode-in-GEMM (large-intermediate) | ✅ | bit-exact to golden; **10.6× less VRAM**, faster at 4096² (positive case) |
 | M6/M9 fused KV-dequant attention | ✅ | bit-identical; **7.7–8.3× less KV VRAM** (KIVI int4+Huffman); capacity win, M9 brick |
+| M6 fused sparse gather (P2, sparse consumer) | ✅ | bit-identical; **27.7× vs decompress-all** at 0.1% touched (~N/K); still 2.3× at K=N |
 | M6 fused embedding-gather (small-intermediate) | ◐ | built, bit-identical; **honest negative** (fuse only large-intermediate) |
 | M5 C++ builder + CPU oracle (RRR-wavelet **+ FM**) | ◐ | native C++ build, **no Warp**; GPU==CPU bit-identical (access/rank **+ count/locate**) |
 | M5 GPU suffix-array build | ✅ | bit-identical to CPU SA; **21–23× faster** at 2M (construction leaves the CPU) |
@@ -86,6 +87,7 @@ make PYTHON=~/warp-solar-system-shaders/.venv/bin/python rans           # M4 blo
 make PYTHON=~/warp-solar-system-shaders/.venv/bin/python fm-search      # M7 FM count + locate
 make PYTHON=~/warp-solar-system-shaders/.venv/bin/python fused-matmul   # M6 fused decode-in-GEMM (large-intermediate)
 make PYTHON=~/warp-solar-system-shaders/.venv/bin/python kv-attention   # M6/M9 fused KV-dequant windowed attention
+make PYTHON=~/warp-solar-system-shaders/.venv/bin/python sparse-gather  # M6/P2 fused sparse gather vs decompress-all
 make PYTHON=~/warp-solar-system-shaders/.venv/bin/python fused          # M6 fused embedding vs unfused
 make build-index                          # M5 native C++ build (no Warp): RRR-wavelet + FM, GPU==CPU bit-identical
 make suffix-array                         # M5 GPU suffix-array build vs CPU (bit-identical + speedup), no Python
@@ -99,7 +101,7 @@ include/chromofold/detail/access_device.cuh  device-side packed-wavelet decode (
 include/chromofold/detail/rrr_wavelet_device.cuh  device-side RRR-backed wavelet decode (cf_rrrw_view + access/rank)
 include/chromofold/detail/fm_search_device.cuh  device-side FM backward-search + LF-walk locate (cf_fm_view)
 include/chromofold/detail/block_huffman_device.cuh  device-side LUT decode-at-bit (feeds fused decode-in-GEMM)
-src/cuda/{access,rank,rrr,rrr_wavelet,rans,fm_search,fused_embedding,fused_matmul,fused_kv_attention}.cu  the CUDA kernels
+src/cuda/{access,rank,rrr,rrr_wavelet,rans,fm_search,fused_embedding,fused_matmul,fused_kv_attention,sparse_gather}.cu  the CUDA kernels
 tools/build_index.cpp                      native C++20 offline builder (SA→BWT→RRR→.cfrw + FM→.cffm), no Warp; CPU oracle
 src/cuda/suffix_array.cu                    GPU suffix-array build (thrust prefix-doubling); include/.../detail/suffix_cpu.hpp = CPU golden
 benchmarks/{gpu_access,frontier,rank_bench,rrr_bench,rrr_wavelet,fm_search,fused_embedding,fused_matmul}.cu  verify + measure

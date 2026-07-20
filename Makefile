@@ -12,9 +12,9 @@ BUILD = build
 REFS  = benchmarks/refs
 VOCABS = 4 16 256 32768 65536 131072
 
-.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet rans fm-search fused-matmul kv-attention suffix-array build-index
+.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet rans fm-search fused-matmul kv-attention sparse-gather suffix-array build-index
 
-all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet $(BUILD)/rans_bench $(BUILD)/fm_search $(BUILD)/fused_matmul $(BUILD)/fused_kv_attention $(BUILD)/suffix_array
+all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet $(BUILD)/rans_bench $(BUILD)/fm_search $(BUILD)/fused_matmul $(BUILD)/fused_kv_attention $(BUILD)/sparse_gather $(BUILD)/suffix_array
 
 $(BUILD)/gpu_access: benchmarks/gpu_access.cu benchmarks/reference_io.h src/cuda/access.cu include/chromofold/chromofold.h
 	@mkdir -p $(BUILD)
@@ -55,6 +55,10 @@ $(BUILD)/fused_matmul: benchmarks/fused_matmul.cu src/cuda/fused_matmul.cu inclu
 $(BUILD)/fused_kv_attention: benchmarks/fused_kv_attention.cu src/cuda/fused_kv_attention.cu include/chromofold/chromofold.h include/chromofold/detail/block_huffman_device.cuh
 	@mkdir -p $(BUILD)
 	$(NVCC) $(NVFLAGS) benchmarks/fused_kv_attention.cu src/cuda/fused_kv_attention.cu -o $@
+
+$(BUILD)/sparse_gather: benchmarks/sparse_gather.cu src/cuda/sparse_gather.cu include/chromofold/detail/rrr_wavelet_device.cuh
+	@mkdir -p $(BUILD)
+	$(NVCC) $(NVFLAGS) benchmarks/sparse_gather.cu src/cuda/sparse_gather.cu -o $@
 
 $(BUILD)/suffix_array: benchmarks/suffix_array.cu src/cuda/suffix_array.cu include/chromofold/detail/suffix_cpu.hpp
 	@mkdir -p $(BUILD)
@@ -147,6 +151,12 @@ rans: $(BUILD)/rans_bench
 	  test -f $(REFS)/rans_$${s}_$${b}.cfrs || $(PYTHON) tools/export_rans.py $(REFS)/rans_$${s}_$${b}.cfrs --stream $$s --block $$b >/dev/null; \
 	done
 	$(BUILD)/rans_bench $(REFS)/rans_peaky_64.cfrs $(REFS)/rans_peaky_1024.cfrs $(REFS)/rans_skewed_64.cfrs $(REFS)/rans_skewed_1024.cfrs
+
+# M6 (sparse-consumer / P2): fused decode+gather (touch K positions) vs decompress-all over the RRR-wavelet
+sparse-gather: $(BUILD)/sparse_gather
+	@mkdir -p $(REFS)
+	@test -f $(REFS)/sg_n1M.cfsg || $(PYTHON) tools/export_sparse_gather.py $(REFS)/sg_n1M.cfsg --n 1000000 --vocab 256 --dim 64 >/dev/null
+	$(BUILD)/sparse_gather $(REFS)/sg_n1M.cfsg
 
 # M6/M9 (KV-path fusion): decode-in-attention over an entropy-coded KV cache vs decode-then-dense
 KV_CFG = --seq 4096 --dim 64 --window 256
