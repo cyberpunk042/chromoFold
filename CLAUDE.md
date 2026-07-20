@@ -49,12 +49,12 @@ lesson** — do not bury or spin it.
 | M2 frontier (raw gather vs wavelet) | ◐ | price-of-addressability measured; pybind11 remains |
 | M3 CUDA `rank` + two-level directory | ✅ | bit-identical; two-level **1.6–1.8× faster** |
 | M4 RRR rank1 (entropy frontier) | ✅ | bit-identical; skewed **2.2–2.8× below packed**, ~0.7 ns |
-| M4 RRR-backed wavelet access/rank | ✅ | bit-identical; BWT **5.80 b/tok < H₀**, 1.25–1.36× smaller; ~10 ns (RRR-decode price) |
+| M4 RRR-backed wavelet access/rank | ✅ | bit-identical; BWT **5.80 b/tok < H₀**, 1.25–1.36× smaller; access **5.0 ns** (1-decode/level) |
 | M4 block-rANS decode (near-entropy coder) | ✅ | bit-identical; **rANS 2.2× < Huffman** on low-entropy+large-block (0.55 vs 1.21 b/val); honest crossover |
 | M7 FM count + locate (over RRR index) | ✅ | bit-identical to ground truth; count **~19 M patterns/s**, GPU-resident locate |
 | M6 fused decode-in-GEMM (large-intermediate) | ✅ | bit-exact to golden; **10.6× less VRAM**, faster at 4096² (positive case) |
 | M6/M9 fused KV-dequant attention | ✅ | bit-identical; **7.7–8.3× less KV VRAM** (KIVI int4+Huffman); capacity win, M9 brick |
-| M6 fused sparse gather (P2, sparse consumer) | ✅ | bit-identical; **27.7× vs decompress-all** at 0.1% touched (~N/K); still 2.3× at K=N |
+| M6 fused sparse gather (P2, sparse consumer) | ✅ | bit-identical; **17.8× vs decompress-all** at 0.1% touched (~N/K); still 3.7× at K=N |
 | M8 reference-delta cluster (cross-seq dedup) | ◐ | bit-identical reconstruct; **25.1× less VRAM**, 63× cheaper/turn; TTFT/max-batch need M9 |
 | M6 fused embedding-gather (small-intermediate) | ◐ | built, bit-identical; **honest negative** (fuse only large-intermediate) |
 | M5 C++ builder + CPU oracle (RRR-wavelet **+ FM**) | ◐ | native C++ build, **no Warp**; GPU==CPU bit-identical (access/rank **+ count/locate**) |

@@ -89,17 +89,40 @@ __device__ __forceinline__ int cf_rrrw_rank1_lvl(const cf_rrrw_view &v, int lvl,
   return r;
 }
 
-// Decode the token at position `i` by walking the wavelet levels. The bit at level `lvl` is read as
-// rank1(i+1) - rank1(i) — reusing the RRR decode path instead of a second bit-access path (matches the oracle).
+// rank1 over [0, pos) AND the plane bit at pos, in ONE block decode — the access primitive. Identical to
+// cf_rrrw_rank1_lvl but it always decodes the target block (even when pos is block-aligned) and extracts bit
+// (pos % T) from the same decoded word, so `access` costs one decode per level instead of two rank1 calls.
+__device__ __forceinline__ int cf_rrrw_rank1_and_bit(const cf_rrrw_view &v, int lvl, int pos, int *bit) {
+  const uint32_t *classes = v.classes + (size_t)lvl * v.cwords;
+  const int nsb1 = v.nsb + 1;
+  int blk = pos / CF_RRR_T, b = pos % CF_RRR_T;
+  int sbi = blk / CF_RRR_S, a = sbi / CF_RRR_K;
+  int r = v.rank_a[(size_t)lvl * v.na + a] + (int)v.rank_d[(size_t)lvl * nsb1 + sbi];
+  int obit = v.off_a[(size_t)lvl * v.na + a] + (int)v.off_d[(size_t)lvl * nsb1 + sbi];
+  for (int j = sbi * CF_RRR_S; j < blk; ++j) {
+    int cl = cf_rrr_classat(classes, j);
+    r += cl;
+    obit += v.width[cl];
+  }
+  int cl = cf_rrr_classat(classes, blk);
+  int off = cf_rrr_readbits(v.offsets, v.offbase[lvl] + obit, v.width[cl]);
+  uint32_t word = cf_rrr_decode_word(v.binom, cl, off);
+  *bit = (int)((word >> b) & 1u);
+  r += __popc(word & ((1u << b) - 1u));  // partial popcount over [blk*T, pos) — zero when pos is block-aligned
+  return r;
+}
+
+// Decode the token at position `i` by walking the wavelet levels, one RRR block decode per level (reads rank1(i)
+// and the bit at i from the same decode). Bit-identical to the two-rank formulation rank1(i+1) - rank1(i).
 template <int LEVELS>
 __device__ __forceinline__ uint32_t cf_rrrw_access_one(const cf_rrrw_view &v, int i, int levels_dyn) {
   int val = 0;
   const int L = (LEVELS > 0) ? LEVELS : levels_dyn;
 #pragma unroll
   for (int lvl = 0; lvl < L; ++lvl) {
-    int r0 = cf_rrrw_rank1_lvl(v, lvl, i);
-    int r1 = cf_rrrw_rank1_lvl(v, lvl, i + 1);
-    if (r1 - r0 == 1) {  // bit == 1: descend into the 1-child block
+    int bit;
+    int r0 = cf_rrrw_rank1_and_bit(v, lvl, i, &bit);
+    if (bit) {  // bit == 1: descend into the 1-child block
       val = (val << 1) | 1;
       i = v.zeros[lvl] + r0;
     } else {  // bit == 0: rank0(i) = i - rank1(i)

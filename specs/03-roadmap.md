@@ -99,20 +99,26 @@ Faithful port of the prototype's `RRRWaveletGPU`; new `.cfrw` v1 reference forma
 Markov stream** (the skewed regime where RRR wins). Device inlines are header-only so a token can be decoded
 in-register inside a future fused consumer (P3).
 
-**Result (RTX 2080 Ti, 2M-token BWT, 100K access + 100K rank queries), both BIT-IDENTICAL to the Warp golden:**
+**Result (RTX 2080 Ti, 2M-token BWT, 100K access + 100K rank queries), both BIT-IDENTICAL to the Warp golden**
+(access numbers are post the one-decode optimization below):
 | vocab | levels | RRR b/tok | packed b/tok | smaller | access | rank |
 |---|---|---|---|---|---|---|
-| 64 | 7 | **5.80** (H₀ 5.96) | 7.88 | 1.36× | 9.67 ns | 6.90 ns |
-| 256 | 9 | **8.09** | 10.13 | 1.25× | 12.12 ns | 9.07 ns |
+| 64 | 7 | **5.80** (H₀ 5.96) | 7.88 | 1.36× | 5.03 ns | 6.88 ns |
+| 256 | 9 | **8.09** | 10.13 | 1.25× | 6.31 ns | 9.18 ns |
 
 Reproduces the prototype's headline (**5.80 b/tok on the BWT, below H₀**) exactly. **The honest price:** the
-in-register RRR decode makes access ~12–15× slower than the packed wavelet (M1 ~0.8 ns) and rank ~10× slower than
-the two-level packed rank (M3 ~0.45 ns) — access pays for two rank1 decodes per level. The trade is memory **and
-capability**: a searchable index 1.25–1.36× smaller, reaching below H₀, still fully GPU-resident. This is the
-compact BWT self-index M7's FM-search rides on. **Next:** M7 FM backward-search (`count`/`locate`) over this
-`cf_rrrw_*` index; and the large-intermediate fused op M6 wants (RRR-decode + sparse gather / KV-dequant), which
-this unlocks. A possible access speedup — read the level bit directly (one decode) instead of two rank1 calls —
-is left as a benchmark-gated optimization.
+in-register RRR decode makes access ~6–8× slower than the packed wavelet (M1 ~0.8 ns) and rank ~10× slower than
+the two-level packed rank (M3 ~0.45 ns). The trade is memory **and capability**: a searchable index 1.25–1.36×
+smaller, reaching below H₀, still fully GPU-resident. This is the compact BWT self-index M7's FM-search rides on.
+
+### M4 access one-decode optimization — ✅ DONE (1.9× access, 1.5–2.9× downstream)
+`access` originally read each level's bit as `rank1(i+1) − rank1(i)` — **two** RRR block decodes per level. The
+new `cf_rrrw_rank1_and_bit` returns rank1(i) **and** the plane bit at i from a **single** block decode (extract
+bit `i%T` from the same unranked word), so `access` costs **one decode per level**. Bit-identical (the descent is
+unchanged). Measured before→after, all still BIT-IDENTICAL: RRR-wavelet **access 9.67→5.03 ns (1.92×)** (V=256
+12.12→6.31), M7 FM **locate 962→611 ns (1.57×)** (the LF-walk does access+rank per step; only access halved), M6
+**sparse decompress-all 6.03→2.10 ms (2.9×)** and fused-sparse@100% 11.2→6.42 ms (1.75×) — the gain tracks how
+access-bound each consumer is. rank is untouched (its two rank1 calls are at different positions, can't share).
 
 ### M4 entropy-coder frontier — block-rANS decode (near-H₀, the honest crossover) — ✅ DONE
 **Delivered (`src/cuda/rans.cu`, `benchmarks/rans_bench.cu`, `tools/export_rans.py`).** A block-rANS value decoder
@@ -249,17 +255,18 @@ and gathers its embedding row inline (`cf_rrrw_access_one` + gather), so the N-l
 exists; the decompress-all baseline reconstructs every id into a buffer, then gathers K rows. New `.cfsg` v1
 reference. Fused sparse gather is **BIT-IDENTICAL** to both the frozen golden and the decompress-all path.
 
-**Result (RTX 2080 Ti, n=1M int tokens, dim=64, RRR index 1.13 MB), fused vs decompress-all-then-gather:**
+**Result (RTX 2080 Ti, n=1M int tokens, dim=64, RRR index 1.13 MB), fused vs decompress-all-then-gather** (post
+the M4 one-decode optimization, which sped the access-bound decompress-all baseline ~2.9×):
 | K / N touched | fused | decompress-all | speedup |
 |---|---|---|---|
-| 0.1% | 0.24 ms | 6.56 ms | **27.7×** |
-| 1% | 0.21 ms | 5.51 ms | 26.7× |
-| 10% | 0.99 ms | 7.76 ms | 7.9× |
-| 50% | 4.95 ms | 16.5 ms | 3.3× |
-| 100% | 11.6 ms | 27.1 ms | 2.3× |
+| 0.1% | 0.12 ms | 2.10 ms | **17.8×** |
+| 1% | 0.13 ms | 2.14 ms | 16.7× |
+| 10% | 0.61 ms | 3.68 ms | 6.0× |
+| 50% | 2.86 ms | 12.7 ms | 4.4× |
+| 100% | 6.42 ms | 23.7 ms | 3.7× |
 
-The sparse win scales ~N/K (27.7× at 0.1%), the succinct-structure payoff: random access without decompressing all.
-It stays ahead even at K=N (2.3×) because fusion also skips the N-length id-buffer round trip. **Honest scope (the
+The sparse win scales ~N/K (17.8× at 0.1%), the succinct-structure payoff: random access without decompressing all.
+It stays ahead even at K=N (3.7×) because fusion also skips the N-length id-buffer round trip. **Honest scope (the
 important caveat):** this baseline reconstructs via the *same per-element wavelet walk*, so it is the worst dense
 option — a genuinely dense whole-tensor decode should use the **M4 bulk block-coder (block-Huffman / rANS, 12–21×
 faster than the wavelet)**, which would beat per-element walks as K→N. So the measured statement is: **over the
