@@ -1,0 +1,44 @@
+name: Packaging seams
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/packaging-seams.yml"
+      - "include/chromofold/**"
+      - "src/cuda/**"
+      - "packaging/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/packaging-seams.yml"
+      - "include/chromofold/**"
+      - "src/cuda/**"
+      - "packaging/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packaging-seams-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  seams:
+    name: Public ABI and format seams
+    runs-on: ubuntu-latest
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu22.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install host compiler and make
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends build-essential ca-certificates
+
+      - name: Build shared library and run no-GPU seams
+        run: make -C packaging clean seams CUDA_LIB=/usr/local/cuda/lib64
