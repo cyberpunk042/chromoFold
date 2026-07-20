@@ -4,8 +4,8 @@
  * returns device pointers and runs asynchronously on the caller's stream — no host allocation, no implicit
  * synchronization, no PCIe round trip.
  *
- * v0 covers the M1 milestone: packed-wavelet `access`. Superblock width is fixed at CF_WAVELET_SB = 8 words,
- * matching the frozen Warp reference.
+ * v0 covers packed-wavelet access/rank, fused embedding gather, and the M6/M9 compressed-KV attention seam.
+ * Superblock width is fixed at CF_WAVELET_SB = 8 words, matching the frozen Warp reference.
  */
 #ifndef CHROMOFOLD_H
 #define CHROMOFOLD_H
@@ -19,6 +19,8 @@ extern "C" {
 
 #define CHROMOFOLD_ABI_VERSION 0
 #define CF_WAVELET_SB 8 /* 32-bit words per superblock */
+#define CF_KV_MAX_HEAD_DIM 128
+#define CF_KV_MAX_WINDOW 512
 
 typedef enum cf_status {
   CF_OK = 0,
@@ -59,6 +61,41 @@ cf_status cf_rank_async(cf_wavelet_view index, const uint32_t *device_symbols,
  * device memory; `out` is [count, dim] device memory. All pointers are device pointers; runs on `stream`. */
 cf_status cf_embedding_gather_async(cf_wavelet_view index, const float *embeddings, uint32_t dim,
                                     const uint32_t *device_positions, float *out, size_t count, void *stream);
+
+/* Fused compressed-KV attention (M6/M9 integration seam).
+ *
+ * K and V are block-Huffman-coded int values held in device memory:
+ *   kw/vw      packed code words
+ *   kb/vb      bit offsets, one per coded block
+ *   kl/vl      decode lookup tables
+ *   kscale     `dim` per-channel K dequantization scales
+ *   vscale     `seq` per-token V dequantization scales
+ *   Q          [nq, dim] row-major query matrix
+ *   out        [nq, dim] row-major output
+ *
+ * The kernel performs causal windowed attention over query rows 0..nq-1 and KV rows 0..seq-1. It decodes and
+ * dequantizes each attended K/V value inside the consumer kernel, so no dense KV buffer is materialized.
+ * All pointers are DEVICE pointers. The function allocates nothing, does not synchronize, and launches on `stream`.
+ * Current v0 bounds: 0 < dim <= CF_KV_MAX_HEAD_DIM, 0 < window <= CF_KV_MAX_WINDOW, 0 <= nq <= seq, block > 0.
+ */
+cf_status cf_kv_attn_fused_async(const uint32_t *kw, const int32_t *kb, const int32_t *kl, int kmax,
+                                 const uint32_t *vw, const int32_t *vb, const int32_t *vl, int vmax,
+                                 const float *kscale, const float *vscale, const float *Q, float *out,
+                                 int seq, int dim, int nq, int window, int block, int zero, float sscale,
+                                 void *stream);
+
+/* Dense-reference KV path used for verification and integration baselines.
+ * It first decodes K and V into caller-provided [seq, dim] fp32 scratch buffers `Kd` and `Vd`, then executes the
+ * same causal windowed attention. This API exists to prove bit-identical behavior and quantify the memory avoided
+ * by cf_kv_attn_fused_async; it is not the preferred serving path.
+ * All pointers are DEVICE pointers. The function allocates nothing, does not synchronize, and launches on `stream`.
+ */
+cf_status cf_kv_attn_dense_async(const uint32_t *kw, const int32_t *kb, const int32_t *kl, int kmax,
+                                 const uint32_t *vw, const int32_t *vb, const int32_t *vl, int vmax,
+                                 const float *kscale, const float *vscale, const float *Q,
+                                 float *Kd, float *Vd, float *out,
+                                 int seq, int dim, int nq, int window, int block, int zero, float sscale,
+                                 void *stream);
 
 #ifdef __cplusplus
 } /* extern "C" */
