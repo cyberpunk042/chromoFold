@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cyberpunk042/chromoFold/benchmarks/m9_result.schema.json",
+  "title": "ChromoFold M9 runtime benchmark result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run", "hardware", "software", "workload", "baseline", "chromofold", "correctness"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "timestamp_utc", "mode"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "timestamp_utc": {"type": "string", "format": "date-time"},
+        "mode": {"enum": ["context-capacity", "batch-capacity", "latency-sweep", "correctness"]}
+      }
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gpu_name", "gpu_vram_bytes", "compute_capability"],
+      "properties": {
+        "gpu_name": {"type": "string", "minLength": 1},
+        "gpu_vram_bytes": {"type": "integer", "minimum": 1},
+        "compute_capability": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+        "cpu": {"type": "string"},
+        "system_ram_bytes": {"type": "integer", "minimum": 1}
+      }
+    },
+    "software": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chromofold_commit", "runtime", "runtime_commit", "cuda_driver", "cuda_runtime"],
+      "properties": {
+        "chromofold_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "runtime": {"const": "llama.cpp"},
+        "runtime_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "cuda_driver": {"type": "string", "minLength": 1},
+        "cuda_runtime": {"type": "string", "minLength": 1},
+        "compiler": {"type": "string"}
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "model_sha256", "context_tokens", "batch_size", "prompt_tokens", "generated_tokens"],
+      "properties": {
+        "model": {"type": "string", "minLength": 1},
+        "model_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "context_tokens": {"type": "integer", "minimum": 1},
+        "batch_size": {"type": "integer", "minimum": 1},
+        "prompt_tokens": {"type": "integer", "minimum": 1},
+        "generated_tokens": {"type": "integer", "minimum": 1},
+        "page_tokens": {"type": "integer", "minimum": 1},
+        "causal_window": {"type": "integer", "minimum": 1},
+        "seed": {"type": "integer"}
+      }
+    },
+    "baseline": {"$ref": "#/$defs/measurement"},
+    "chromofold": {"$ref": "#/$defs/measurement"},
+    "correctness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generation_completed", "quality_check", "historical_dense_kv_materialized"],
+      "properties": {
+        "generation_completed": {"type": "boolean"},
+        "quality_check": {"enum": ["pass", "fail", "not-run"]},
+        "max_abs_error": {"type": "number", "minimum": 0},
+        "mean_squared_error": {"type": "number", "minimum": 0},
+        "historical_dense_kv_materialized": {"type": "boolean"},
+        "notes": {"type": "string"}
+      }
+    }
+  },
+  "$defs": {
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completed", "peak_vram_bytes", "resident_kv_bytes", "ttft_ms", "prefill_tokens_per_second", "decode_tokens_per_second", "decode_latency_p50_ms", "decode_latency_p95_ms"],
+      "properties": {
+        "completed": {"type": "boolean"},
+        "oom": {"type": "boolean"},
+        "peak_vram_bytes": {"type": "integer", "minimum": 0},
+        "resident_kv_bytes": {"type": "integer", "minimum": 0},
+        "ttft_ms": {"type": "number", "minimum": 0},
+        "prefill_tokens_per_second": {"type": "number", "minimum": 0},
+        "decode_tokens_per_second": {"type": "number", "minimum": 0},
+        "decode_latency_p50_ms": {"type": "number", "minimum": 0},
+        "decode_latency_p95_ms": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}

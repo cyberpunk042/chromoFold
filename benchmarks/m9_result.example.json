@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "run": {
+    "id": "example-not-a-measurement",
+    "timestamp_utc": "2026-07-20T00:00:00Z",
+    "mode": "context-capacity"
+  },
+  "hardware": {
+    "gpu_name": "EXAMPLE GPU",
+    "gpu_vram_bytes": 8589934592,
+    "compute_capability": "8.6",
+    "cpu": "EXAMPLE CPU",
+    "system_ram_bytes": 68719476736
+  },
+  "software": {
+    "chromofold_commit": "0000000000000000000000000000000000000000",
+    "runtime": "llama.cpp",
+    "runtime_commit": "0000000000000000000000000000000000000000",
+    "cuda_driver": "example",
+    "cuda_runtime": "example",
+    "compiler": "example"
+  },
+  "workload": {
+    "model": "example.gguf",
+    "model_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "context_tokens": 65536,
+    "batch_size": 1,
+    "prompt_tokens": 65024,
+    "generated_tokens": 512,
+    "page_tokens": 256,
+    "causal_window": 4096,
+    "seed": 42
+  },
+  "baseline": {
+    "completed": false,
+    "oom": true,
+    "peak_vram_bytes": 8500000000,
+    "resident_kv_bytes": 7000000000,
+    "ttft_ms": 0,
+    "prefill_tokens_per_second": 0,
+    "decode_tokens_per_second": 0,
+    "decode_latency_p50_ms": 0,
+    "decode_latency_p95_ms": 0
+  },
+  "chromofold": {
+    "completed": true,
+    "oom": false,
+    "peak_vram_bytes": 7900000000,
+    "resident_kv_bytes": 900000000,
+    "ttft_ms": 1600,
+    "prefill_tokens_per_second": 1100,
+    "decode_tokens_per_second": 36.5,
+    "decode_latency_p50_ms": 27.1,
+    "decode_latency_p95_ms": 31.8
+  },
+  "correctness": {
+    "generation_completed": true,
+    "quality_check": "pass",
+    "max_abs_error": 0.002,
+    "mean_squared_error": 0.00015,
+    "historical_dense_kv_materialized": false,
+    "notes": "Illustrative values only; this file is not benchmark evidence."
+  }
+}

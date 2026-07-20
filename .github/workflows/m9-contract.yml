@@ -1,0 +1,38 @@
+name: M9 contract
+
+on:
+  pull_request:
+    paths:
+      - "specs/06-m9-runtime-integration.md"
+      - "integrations/llama.cpp/**"
+      - "benchmarks/m9_result.schema.json"
+      - "benchmarks/m9_result.example.json"
+      - "benchmarks/validate_m9_result.py"
+      - ".github/workflows/m9-contract.yml"
+  push:
+    branches: [main]
+    paths:
+      - "specs/06-m9-runtime-integration.md"
+      - "integrations/llama.cpp/**"
+      - "benchmarks/m9_result.schema.json"
+      - "benchmarks/m9_result.example.json"
+      - "benchmarks/validate_m9_result.py"
+      - ".github/workflows/m9-contract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile validator
+        run: python -m py_compile benchmarks/validate_m9_result.py
+      - name: Validate illustrative result
+        run: python benchmarks/validate_m9_result.py benchmarks/m9_result.example.json --require-claim
+      - name: Verify example is visibly non-evidence
+        run: grep -q "Illustrative values only" benchmarks/m9_result.example.json
