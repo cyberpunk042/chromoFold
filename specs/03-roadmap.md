@@ -114,6 +114,28 @@ compact BWT self-index M7's FM-search rides on. **Next:** M7 FM backward-search 
 this unlocks. A possible access speedup — read the level bit directly (one decode) instead of two rank1 calls —
 is left as a benchmark-gated optimization.
 
+### M4 entropy-coder frontier — block-rANS decode (near-H₀, the honest crossover) — ✅ DONE
+**Delivered (`src/cuda/rans.cu`, `benchmarks/rans_bench.cu`, `tools/export_rans.py`).** A block-rANS value decoder
+(range Asymmetric Numeral Systems — the coder in zstd-FSE / nvCOMP gANS), the near-entropy alternative to
+block-Huffman: rANS approaches H₀ with no per-symbol overhead, and the fixed-count-block layout keeps it
+GPU-parallel (one thread per block) and randomly addressable. Decode is a slot lookup (`state & (M−1) → symbol`) +
+a state update + an 8-bit renorm — faithful port of `warp_compress.gpu_rans`, new `.cfrs` v1 reference.
+
+**Result (RTX 2080 Ti, 1M int4 values), all BIT-IDENTICAL to the Warp golden:**
+| stream | H₀ | block | rANS b/val | Huffman b/val | winner | decode |
+|---|---|---|---|---|---|---|
+| peaky int4 | 3.06 | 64 | 4.51 | 3.62 | Huffman | 13.9 G/s |
+| peaky int4 | 3.06 | 1024 | 3.16 | 3.15 | Huffman | 1.8 G/s |
+| very skewed | 0.45 | 64 | 1.88 | 1.68 | Huffman | 14.9 G/s |
+| very skewed | 0.45 | **1024** | **0.55** (1.21× H₀) | 1.21 | **rANS (2.2× smaller)** | 2.6 G/s |
+
+**The honest crossover (reproduced exactly):** rANS carries a **fixed 32-bit state per block**, so at small blocks
+it loses to Huffman, and for multi-bit streams (H₀≈3) Huffman is already near-optimal. rANS **wins decisively only
+on low-entropy streams with large blocks** — where Huffman's ~1-bit-per-symbol floor bites (1.21 b/val) and rANS
+reaches near H₀ (0.55). A second honest trade: large blocks tighten the ratio but shrink decode parallelism
+(13.9 G/s → 2.6 G/s). So block-Huffman stays the small-block random-access coder; rANS is the skewed, bulk-decode
+coder — **pick per data + access pattern** (P9 knob). Both feed the fused ops via the same block-directory shape.
+
 ## M5 — C++ builder + CPU verifier — ◐ builder + scalar CPU oracle DONE (AVX + GPU-SA build next)
 **Goal.** A C++20 offline builder (suffix array, BWT, RRR, serialization) and an AVX2/AVX-512 CPU backend as the
 correctness oracle and honest CPU baseline (§9). Establishes the build ≠ query split (P9).

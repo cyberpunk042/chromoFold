@@ -50,6 +50,7 @@ lesson** — do not bury or spin it.
 | M3 CUDA `rank` + two-level directory | ✅ | bit-identical; two-level **1.6–1.8× faster** |
 | M4 RRR rank1 (entropy frontier) | ✅ | bit-identical; skewed **2.2–2.8× below packed**, ~0.7 ns |
 | M4 RRR-backed wavelet access/rank | ✅ | bit-identical; BWT **5.80 b/tok < H₀**, 1.25–1.36× smaller; ~10 ns (RRR-decode price) |
+| M4 block-rANS decode (near-entropy coder) | ✅ | bit-identical; **rANS 2.2× < Huffman** on low-entropy+large-block (0.55 vs 1.21 b/val); honest crossover |
 | M7 FM count + locate (over RRR index) | ✅ | bit-identical to ground truth; count **~19 M patterns/s**, GPU-resident locate |
 | M6 fused decode-in-GEMM (large-intermediate) | ✅ | bit-exact to golden; **10.6× less VRAM**, faster at 4096² (positive case) |
 | M6/M9 fused KV-dequant attention | ✅ | bit-identical; **7.7–8.3× less KV VRAM** (KIVI int4+Huffman); capacity win, M9 brick |
@@ -81,6 +82,7 @@ make PYTHON=~/warp-solar-system-shaders/.venv/bin/python experiment-a   # M2 fro
 make PYTHON=~/warp-solar-system-shaders/.venv/bin/python rank           # M3 rank + two-level
 make PYTHON=~/warp-solar-system-shaders/.venv/bin/python rrr            # M4 RRR frontier
 make PYTHON=~/warp-solar-system-shaders/.venv/bin/python rrr-wavelet    # M4 RRR-backed wavelet access/rank
+make PYTHON=~/warp-solar-system-shaders/.venv/bin/python rans           # M4 block-rANS vs Huffman (entropy crossover)
 make PYTHON=~/warp-solar-system-shaders/.venv/bin/python fm-search      # M7 FM count + locate
 make PYTHON=~/warp-solar-system-shaders/.venv/bin/python fused-matmul   # M6 fused decode-in-GEMM (large-intermediate)
 make PYTHON=~/warp-solar-system-shaders/.venv/bin/python kv-attention   # M6/M9 fused KV-dequant windowed attention
@@ -97,7 +99,7 @@ include/chromofold/detail/access_device.cuh  device-side packed-wavelet decode (
 include/chromofold/detail/rrr_wavelet_device.cuh  device-side RRR-backed wavelet decode (cf_rrrw_view + access/rank)
 include/chromofold/detail/fm_search_device.cuh  device-side FM backward-search + LF-walk locate (cf_fm_view)
 include/chromofold/detail/block_huffman_device.cuh  device-side LUT decode-at-bit (feeds fused decode-in-GEMM)
-src/cuda/{access,rank,rrr,rrr_wavelet,fm_search,fused_embedding,fused_matmul,fused_kv_attention}.cu  the CUDA kernels
+src/cuda/{access,rank,rrr,rrr_wavelet,rans,fm_search,fused_embedding,fused_matmul,fused_kv_attention}.cu  the CUDA kernels
 tools/build_index.cpp                      native C++20 offline builder (SA→BWT→RRR→.cfrw + FM→.cffm), no Warp; CPU oracle
 src/cuda/suffix_array.cu                    GPU suffix-array build (thrust prefix-doubling); include/.../detail/suffix_cpu.hpp = CPU golden
 benchmarks/{gpu_access,frontier,rank_bench,rrr_bench,rrr_wavelet,fm_search,fused_embedding,fused_matmul}.cu  verify + measure
