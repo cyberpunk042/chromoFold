@@ -68,6 +68,24 @@ is 4× larger it is only ~1.35× the *total* index (the bitplane dominates at 4 
 query-bound workload, and a per-deployment knob. A `nwords+1` fine-array sentinel is required (a query at pos=n
 hits `word == nwords`).
 
+## M4 result — RRR rank1: the entropy frontier (`make rrr`)
+
+Native CUDA RRR bitvector rank1 (superblock jump + class scan + one combinatorial in-register block decode),
+verified bit-for-bit vs the Warp golden, across densities.
+
+```
+   density       H0    RRR b/bit  vs pack   rank1
+    0.50       1.000       1.167    0.86×    0.84 ns
+    0.10       0.469       0.669    1.50×    0.71 ns
+    0.03       0.194       0.447    2.24×    0.66 ns
+    0.005      0.045       0.353    2.83×    0.63 ns
+```
+
+Skewed planes compress **2.2–2.8× below packed** (toward H₀) while rank1 stays **~0.7 ns** — the combinatorial
+decode is nearly free, and *faster* on skewed planes (smaller offset widths). **Honest bound:** on max-entropy
+(balanced) planes RRR is *bigger* than packed (1.167 b/bit), so keep those packed. This is exactly the BWT's
+profile — its bitplanes are skewed by construction, which is why the FM-index reaches below H₀.
+
 ## M6 result — Experiment D: fused decode+embedding-gather (`make fused`)
 
 Tests the P3 thesis (decode inside the consumer, no intermediate token buffer) against unfused
@@ -98,4 +116,5 @@ sharper and more useful.
 - `gpu_access.cu` — M1: loads the reference, runs `cf_access_async`, verifies bit-identity, times both layers.
 - `frontier.cu` — M2: raw gather vs wavelet access across vocab and pattern (Experiment A).
 - `rank_bench.cu` — M3: native rank vs golden + linear vs two-level rank directory.
+- `rrr_bench.cu` — M4: native RRR rank1 vs golden + the entropy memory-latency frontier (`.cfrr` refs).
 - `fused_embedding.cu` — M6: fused decode+gather (two mappings) vs unfused (Experiment D).

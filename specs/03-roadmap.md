@@ -68,11 +68,27 @@ the *total* index (the bitplane dominates at 4 B/word), a clear trade for a quer
 per-deployment knob (P9). Needed an `nwords+1` fine-array sentinel (a query at pos=n hits word=nwords). Next:
 wire the two-level layout into `cf_access` too, and add the RRR-coded frontier (M4).
 
-## M4 — RRR-coded bitplanes on GPU
+## M4 — RRR-coded bitplanes on GPU — ✅ DONE (rank1; wavelet-level wiring next)
 **Goal.** Port RRR rank/decode so the resident index reaches the entropy frontier (the Warp prototype hit
-5.80 b/tok on a BWT, below H₀). Include the two-level *encoding* (int32 anchors + uint16 deltas).
-**Acceptance.** RRR `access`/`rank` bit-identical; measured memory–latency frontier vs packed wavelet and zstd,
-honestly bounded (RRR wins on skewed planes, not on max-entropy).
+5.80 b/tok on a BWT, below H₀).
+**Delivered (`src/cuda/rrr.cu`, `benchmarks/rrr_bench.cu`).** Faithful CUDA port of the RRR bitvector rank1:
+superblock jump + in-block class scan + ONE combinatorial in-register block decode (`cf_decode_word` unrank via
+a 16×16 binomial table) + `__popc`. `.cfrr` reference format + `cf_rrr_rank_async`. **Bit-identical to the Warp
+golden at every density.**
+
+**Result (RTX 2080 Ti), the entropy memory-latency frontier:**
+| density | H₀ | RRR b/bit | vs packed | rank1 |
+|---|---|---|---|---|
+| 0.50 | 1.00 | 1.167 | 0.86× | 0.84 ns |
+| 0.10 | 0.469 | 0.669 | 1.50× | 0.71 ns |
+| 0.03 | 0.194 | 0.447 | 2.24× | 0.66 ns |
+| 0.005 | 0.045 | 0.353 | 2.83× | 0.63 ns |
+
+Skewed planes compress **2.2–2.8× below packed** (toward H₀) while rank1 stays **~0.7 ns** — the combinatorial
+decode is nearly free and *faster* on skewed planes (smaller offset widths). Honest bound: on max-entropy planes
+RRR is *bigger* than packed (1.167 b/bit) — keep those packed. This is the BWT's profile (skewed → RRR wins),
+the memory the FM-index rides on. **Next:** wire RRR under the wavelet levels + add the two-level superblock
+encoding; this also unlocks the large-intermediate fused op M6 wants (decode + sparse gather / KV-dequant).
 
 ## M5 — C++ builder + optimized CPU verifier
 **Goal.** A C++20 offline builder (suffix array, BWT, RRR, serialization) and an AVX2/AVX-512 CPU backend as the
