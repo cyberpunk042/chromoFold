@@ -11,9 +11,9 @@ BUILD = build
 REFS  = benchmarks/refs
 VOCABS = 4 16 256 32768 65536 131072
 
-.PHONY: all clean bench frontier reference experiment-a fused
+.PHONY: all clean bench frontier reference experiment-a fused rank
 
-all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding
+all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench
 
 $(BUILD)/gpu_access: benchmarks/gpu_access.cu benchmarks/reference_io.h src/cuda/access.cu include/chromofold/chromofold.h
 	@mkdir -p $(BUILD)
@@ -26,6 +26,10 @@ $(BUILD)/frontier: benchmarks/frontier.cu benchmarks/reference_io.h src/cuda/acc
 $(BUILD)/fused_embedding: benchmarks/fused_embedding.cu benchmarks/reference_io.h src/cuda/access.cu src/cuda/fused_embedding.cu include/chromofold/chromofold.h include/chromofold/detail/access_device.cuh
 	@mkdir -p $(BUILD)
 	$(NVCC) $(NVFLAGS) benchmarks/fused_embedding.cu src/cuda/access.cu src/cuda/fused_embedding.cu -o $@
+
+$(BUILD)/rank_bench: benchmarks/rank_bench.cu benchmarks/reference_io.h src/cuda/rank.cu include/chromofold/chromofold.h include/chromofold/detail/access_device.cuh
+	@mkdir -p $(BUILD)
+	$(NVCC) $(NVFLAGS) benchmarks/rank_bench.cu src/cuda/rank.cu -o $@
 
 # M1: freeze the default reference vector and verify the CUDA access kernel against it
 reference: tools/export_reference.py
@@ -44,6 +48,14 @@ experiment-a: $(BUILD)/frontier
 	                  $(REFS)/ref_V32768.cfwv $(REFS)/ref_V65536.cfwv $(REFS)/ref_V131072.cfwv
 
 frontier: experiment-a
+
+# M3: native rank + two-level rank directory experiment (verify vs golden, latency vs memory)
+rank: $(BUILD)/rank_bench
+	@mkdir -p $(REFS)
+	@for v in 256 32768; do \
+	  test -f $(REFS)/ref_V$$v.cfwv || $(PYTHON) tools/export_reference.py $(REFS)/ref_V$$v.cfwv --vocab $$v >/dev/null; \
+	done
+	$(BUILD)/rank_bench $(REFS)/ref_V256.cfwv $(REFS)/ref_V32768.cfwv
 
 # M6: fused decode+embedding-gather vs unfused (Experiment D). Reuses the V=32768 reference.
 fused: $(BUILD)/fused_embedding

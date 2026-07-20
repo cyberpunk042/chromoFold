@@ -5,12 +5,15 @@ bit-for-bit. Depends on the measured prototype (warp-solar-system-shaders/warp_c
 
     python tools/export_reference.py [out.cfwv] [--n N] [--vocab V] [--queries Q]
 
-Binary layout v2 (little-endian):
-    magic "CFWV" | u32 version=2 | u32 levels | u64 n | u32 nwords | u32 nblocks | u32 nqueries
+Binary layout v3 (little-endian):
+    magic "CFWV" | u32 version=3 | u32 levels | u64 n | u32 nwords | u32 nblocks | u32 nqueries | u32 nrank
                  | u32 token_bytes | u32 vocab
     words[levels*nwords] u32 | superblocks[levels*(nblocks+1)] i32 | zeros[levels] i32
-    positions[nqueries] u32 | golden_tokens[nqueries] u32 | raw_tokens[n * token_bytes]
+    positions[nqueries] u32 | golden_tokens[nqueries] u32
+    rank_c[nrank] u32 | rank_i[nrank] u32 | rank_golden[nrank] u32
+    raw_tokens[n * token_bytes]
 `nblocks` is the superblock count; the sb table has nblocks+1 entries per level. SB (words/superblock) = 8.
+`rank_golden[k]` = occurrences of symbol rank_c[k] in seq[0:rank_i[k]] (the FM-index primitive).
 `raw_tokens` is the minimal-width packed token stream (the raw-GPU-gather baseline for Experiment A):
 token_bytes = 1 if levels<=8, 2 if levels<=16, else 4.
 """
@@ -50,6 +53,11 @@ def main():
     assert np.array_equal(golden, seq[pos]), "prototype access disagrees with the sequence"
     assert SB == 8, f"exporter assumes SB=8, prototype has SB={SB}"
 
+    nrank = a.queries
+    rank_c = rng.integers(0, a.vocab, nrank).astype(np.uint32)       # rank queries: occurrences of c in seq[:i]
+    rank_i = rng.integers(0, a.n + 1, nrank).astype(np.uint32)
+    rank_golden = gw.rank(rank_c.astype(np.int32), rank_i.astype(np.int32)).astype(np.uint32)
+
     token_bytes = 1 if levels <= 8 else (2 if levels <= 16 else 4)
     raw_dtype = {1: np.uint8, 2: np.uint16, 4: np.uint32}[token_bytes]
     raw = seq.astype(raw_dtype)                                      # minimal-width raw token stream (gather baseline)
@@ -58,12 +66,15 @@ def main():
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "wb") as f:
         f.write(b"CFWV")
-        f.write(struct.pack("<IIQIIIII", 2, levels, a.n, nwords, nblocks, a.queries, token_bytes, a.vocab))
+        f.write(struct.pack("<IIQIIIIII", 3, levels, a.n, nwords, nblocks, a.queries, nrank, token_bytes, a.vocab))
         f.write(np.ascontiguousarray(words).tobytes())
         f.write(np.ascontiguousarray(sb).tobytes())
         f.write(np.ascontiguousarray(zeros).tobytes())
         f.write(np.ascontiguousarray(pos).tobytes())
         f.write(np.ascontiguousarray(golden).tobytes())
+        f.write(np.ascontiguousarray(rank_c).tobytes())
+        f.write(np.ascontiguousarray(rank_i).tobytes())
+        f.write(np.ascontiguousarray(rank_golden).tobytes())
         f.write(np.ascontiguousarray(raw).tobytes())
 
     idx_b = words.nbytes + sb.nbytes + zeros.nbytes

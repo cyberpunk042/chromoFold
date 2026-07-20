@@ -48,6 +48,26 @@ uint32 32) and is slightly larger on byte-aligned vocab. The honest conclusion (
 dense small-vocab uniform reads; the wavelet's premium buys rank/select/FM-search and large-vocab footprint** —
 the win is capabilities and sparse/search access, not per-element gather speed.
 
+## M3 result — native `rank` + two-level rank directory (`make rank`)
+
+Native CUDA `rank(c, i)` verified bit-for-bit vs the Warp golden, then two rank-directory designs measured
+head-to-head — the architecture §6 / brief §5.2 question: does a finer directory's extra memory buy latency?
+
+```
+  vocab  bits  correct   linear ns   2-level ns   speedup   lin dir   2lvl dir
+    256     8      ✓        0.73        0.45        1.63×     0.50 B/w  2.06 B/w
+  32768    15      ✓        1.46        0.80        1.82×     0.50 B/w  2.06 B/w
+```
+
+- **linear** (M1 layout): superblock every 8 words + scan ≤7 words + one partial popcount.
+- **two-level**: coarse int32 superblock (every 64 words) + a per-word uint16 within-superblock prefix → **zero
+  word scan**.
+
+**Decision: adopt two-level.** It is 1.6–1.8× faster (the win grows with level count), and although its directory
+is 4× larger it is only ~1.35× the *total* index (the bitplane dominates at 4 B/word) — a clear trade for a
+query-bound workload, and a per-deployment knob. A `nwords+1` fine-array sentinel is required (a query at pos=n
+hits `word == nwords`).
+
 ## M6 result — Experiment D: fused decode+embedding-gather (`make fused`)
 
 Tests the P3 thesis (decode inside the consumer, no intermediate token buffer) against unfused
@@ -77,4 +97,5 @@ sharper and more useful.
 - `reference_io.h` — the `.cfwv` v2 loader, shared by the benchmarks.
 - `gpu_access.cu` — M1: loads the reference, runs `cf_access_async`, verifies bit-identity, times both layers.
 - `frontier.cu` — M2: raw gather vs wavelet access across vocab and pattern (Experiment A).
+- `rank_bench.cu` — M3: native rank vs golden + linear vs two-level rank directory.
 - `fused_embedding.cu` — M6: fused decode+gather (two mappings) vs unfused (Experiment D).

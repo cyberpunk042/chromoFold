@@ -53,10 +53,20 @@ median over 30 reps, three query patterns, six vocabularies. Honest findings:
 **Remaining.** pybind11 binding so `cf_access` is callable from Python with the prototype's API unchanged;
 add the RRR-wavelet row and effective-bandwidth column.
 
-## M3 — CUDA C++ `rank` + two-level rank directory
-**Goal.** Port `rank`; implement and benchmark the two-level rank directory (§6) vs the eight-word-scan layout.
-**Acceptance.** `rank` bit-identical to the naïve/CPU reference; two-level directory measured (latency vs
-directory-memory tradeoff) with a recorded decision.
+## M3 — CUDA C++ `rank` + two-level rank directory — ✅ DONE
+**Goal.** Port `rank`; implement and benchmark the two-level rank directory (§6) vs the word-scan layout.
+**Delivered (`src/cuda/rank.cu`, `benchmarks/rank_bench.cu`).** `cf_rank_async` (device-native, templated by
+level count) **bit-identical** to the Warp golden. Two rank directories measured head-to-head:
+- *linear* (M1 layout): superblock every 8 words + scan ≤7 words + one partial popcount — 0.50 B/word directory.
+- *two-level*: coarse int32 superblock (every 64 words) + a **per-word uint16 within-superblock prefix** → zero
+  word scan — 2.06 B/word directory.
+
+**Result (RTX 2080 Ti), both bit-identical:** two-level rank is **1.63× faster at V=256 (0.73→0.45 ns)** and
+**1.82× at V=32768 (1.46→0.80 ns)** — the win grows with level count (more rank1 calls, more scan eliminated).
+**Recorded decision:** adopt the two-level directory for `rank`/FM-search. The 4× larger directory is only ~1.35×
+the *total* index (the bitplane dominates at 4 B/word), a clear trade for a query-bound workload — and it is a
+per-deployment knob (P9). Needed an `nwords+1` fine-array sentinel (a query at pos=n hits word=nwords). Next:
+wire the two-level layout into `cf_access` too, and add the RRR-coded frontier (M4).
 
 ## M4 — RRR-coded bitplanes on GPU
 **Goal.** Port RRR rank/decode so the resident index reaches the entropy frontier (the Warp prototype hit

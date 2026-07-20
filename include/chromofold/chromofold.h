@@ -49,6 +49,11 @@ typedef struct cf_wavelet_view {
 cf_status cf_access_async(cf_wavelet_view index, const uint32_t *device_positions,
                           uint32_t *device_output, size_t count, void *stream);
 
+/* Device-native batched rank: for each query, occurrences of `device_symbols[t]` in the first
+ * `device_positions[t]` tokens (the FM-index primitive). All arrays are device pointers of length `count`. */
+cf_status cf_rank_async(cf_wavelet_view index, const uint32_t *device_symbols,
+                        const uint32_t *device_positions, uint32_t *device_output, size_t count, void *stream);
+
 /* Fused decode-and-consume (constitution P3): for each position, decode its token id and IMMEDIATELY gather that
  * token's embedding row — a full decompressed token buffer never exists. `embeddings` is [vocab, dim] row-major
  * device memory; `out` is [count, dim] device memory. All pointers are device pointers; runs on `stream`. */
