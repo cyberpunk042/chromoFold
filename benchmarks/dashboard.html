@@ -1,0 +1,337 @@
+<style>
+  :root{
+    --bg:#F4F6F8; --panel:#FFFFFF; --panel-2:#EEF1F5; --ink:#14181D; --ink-2:#3B4653; --faint:#5A6673;
+    --hair:#D8DEE6; --grid:#E4E1DA;
+    --cpp:#B9691F; --cpp-ink:#8A4E14; --py:#2E7D78; --brick:#B23A2E;
+    --ok:#2E7D46; --warn:#9A6a12; --todo:#7A8290;
+    --serif:"Iowan Old Style","Charter",Georgia,Cambria,"Times New Roman",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --maxw:78rem;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#10141A; --panel:#171C24; --panel-2:#1D242E; --ink:#E7EBF0; --ink-2:#AEB8C4; --faint:#7C8896;
+    --hair:#2A323D; --grid:#232B34;
+    --cpp:#E8944A; --cpp-ink:#F0A968; --py:#4FB3AC; --brick:#D6584B;
+    --ok:#5FB97C; --warn:#D6A94A; --todo:#8892A0;
+  }}
+  :root[data-theme="light"]{--bg:#F4F6F8;--panel:#FFFFFF;--panel-2:#EEF1F5;--ink:#14181D;--ink-2:#3B4653;--faint:#5A6673;--hair:#D8DEE6;--grid:#E4E1DA;--cpp:#B9691F;--cpp-ink:#8A4E14;--py:#2E7D78;--brick:#B23A2E;--ok:#2E7D46;--warn:#9A6A12;--todo:#7A8290;}
+  :root[data-theme="dark"]{--bg:#10141A;--panel:#171C24;--panel-2:#1D242E;--ink:#E7EBF0;--ink-2:#AEB8C4;--faint:#7C8896;--hair:#2A323D;--grid:#232B34;--cpp:#E8944A;--cpp-ink:#F0A968;--py:#4FB3AC;--brick:#D6584B;--ok:#5FB97C;--warn:#D6A94A;--todo:#8892A0;}
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;
+    -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 1.4rem 4rem;}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+  h1,h2,h3{margin:0;text-wrap:balance;}
+  a{color:var(--cpp-ink);}
+
+  header.top{padding:2.2rem 0 1rem;border-bottom:1px solid var(--hair);}
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);}
+  h1.title{font-family:var(--serif);font-weight:600;font-size:clamp(1.8rem,4.2vw,2.9rem);line-height:1.1;margin-top:.6rem;}
+  h1.title em{font-style:normal;color:var(--cpp);}
+  .sub{font-family:var(--serif);color:var(--ink-2);font-size:clamp(1.02rem,2vw,1.2rem);margin-top:.7rem;max-width:44rem;}
+  .machinebar{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;margin-top:1.3rem;font-family:var(--mono);font-size:.78rem;color:var(--faint);}
+  select{font-family:var(--mono);font-size:.8rem;background:var(--panel);color:var(--ink);border:1px solid var(--hair);border-radius:8px;padding:.35rem .6rem;}
+  .machinebar .meta{color:var(--ink-2);}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:1px;background:var(--hair);
+    border:1px solid var(--hair);border-radius:12px;overflow:hidden;margin-top:1.6rem;}
+  .kpi{background:var(--panel);padding:1rem 1.1rem;}
+  .kpi .n{font-family:var(--mono);font-weight:600;font-size:1.7rem;line-height:1;color:var(--ink);}
+  .kpi .n s{text-decoration:none;color:var(--cpp);}
+  .kpi .l{font-size:.76rem;color:var(--faint);margin-top:.35rem;}
+
+  section{padding:2.4rem 0 0;}
+  h2.sec{font-family:var(--sans);font-size:1.02rem;font-weight:650;letter-spacing:.01em;}
+  h2.sec span{color:var(--faint);font-weight:400;font-family:var(--mono);font-size:.8rem;margin-left:.5rem;}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(20rem,1fr));gap:.9rem;margin-top:1rem;}
+  .card{background:var(--panel);border:1px solid var(--hair);border-radius:12px;padding:1.1rem 1.15rem;display:flex;flex-direction:column;gap:.5rem;}
+  .card .top{display:flex;align-items:center;justify-content:space-between;gap:.6rem;}
+  .card h3{font-size:.95rem;font-weight:650;}
+  .card .mid{font-family:var(--mono);font-size:.72rem;color:var(--faint);}
+  .pill{font-family:var(--mono);font-size:.66rem;letter-spacing:.05em;text-transform:uppercase;padding:.15rem .5rem;border-radius:999px;white-space:nowrap;}
+  .pill.done{color:var(--ok);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent);}
+  .pill.partial{color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);}
+  .pill.todo{color:var(--todo);border:1px solid var(--hair);}
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.2rem;}
+  .lane{border-radius:9px;padding:.55rem .65rem;background:var(--panel-2);}
+  .lane .k{font-family:var(--mono);font-size:.64rem;letter-spacing:.08em;text-transform:uppercase;}
+  .lane.py .k{color:var(--py);} .lane.cpp .k{color:var(--cpp);}
+  .lane .v{font-size:.82rem;color:var(--ink);margin-top:.2rem;line-height:1.35;}
+  .compare{font-size:.82rem;color:var(--ink-2);}
+  .caveat{font-size:.8rem;color:var(--ink-2);border-left:2px solid var(--brick);padding-left:.6rem;}
+  .caveat b{color:var(--brick);font-weight:600;font-family:var(--mono);font-size:.68rem;letter-spacing:.05em;text-transform:uppercase;}
+
+  .grid2{display:grid;grid-template-columns:1fr;gap:1rem;margin-top:1rem;}
+  @media(min-width:820px){.grid2{grid-template-columns:1.1fr 1fr;}}
+  .panel{background:var(--panel);border:1px solid var(--hair);border-radius:12px;padding:1.1rem 1.2rem;}
+  .panel h3{font-size:.9rem;font-weight:650;margin-bottom:.2rem;}
+  .panel .cap{font-family:var(--mono);font-size:.72rem;color:var(--faint);margin-bottom:.7rem;}
+  .tablewrap{overflow-x:auto;}
+  table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:.76rem;font-variant-numeric:tabular-nums;min-width:22rem;}
+  th,td{padding:.4rem .6rem;text-align:right;border-top:1px solid var(--hair);white-space:nowrap;}
+  th:first-child,td:first-child{text-align:left;}
+  thead th{color:var(--faint);font-weight:500;border-top:0;font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;}
+  canvas{display:block;width:100%;height:auto;margin-top:.4rem;}
+
+  .note{background:var(--panel-2);border:1px solid var(--hair);border-left:3px solid var(--cpp);border-radius:12px;padding:1.1rem 1.3rem;margin-top:1rem;font-size:.9rem;color:var(--ink-2);}
+  .note b{color:var(--ink);}
+  .protolist{display:grid;grid-template-columns:repeat(auto-fill,minmax(17rem,1fr));gap:.6rem;margin-top:1rem;}
+  .proto{background:var(--panel);border:1px solid var(--hair);border-radius:10px;padding:.7rem .85rem;}
+  .proto .a{font-family:var(--mono);font-size:.68rem;letter-spacing:.05em;text-transform:uppercase;color:var(--py);}
+  .proto .r{font-size:.82rem;color:var(--ink-2);margin-top:.25rem;}
+  pre{background:var(--panel-2);border:1px solid var(--hair);border-radius:10px;padding:.9rem 1rem;overflow-x:auto;font-family:var(--mono);font-size:.76rem;color:var(--ink);margin-top:1rem;}
+  footer{margin-top:2.6rem;padding-top:1.4rem;border-top:1px solid var(--hair);font-family:var(--mono);font-size:.72rem;color:var(--faint);display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">ChromoFold · native engine ⇄ prototype</p>
+    <h1 class="title">One system, two implementations — <em>measured</em>, side by side.</h1>
+    <p class="sub">A GPU-resident, searchable, succinct-data-structure runtime for LLM data. The Python/Warp
+      prototype is the oracle; the C++/CUDA engine is the hot path. Every native kernel is verified bit-for-bit
+      against a frozen prototype golden before any number is trusted.</p>
+    <div class="machinebar">
+      <span>machine</span>
+      <select id="machine"></select>
+      <span class="meta" id="machine-meta"></span>
+    </div>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <section>
+    <h2 class="sec">Milestones <span>Python/Warp vs C++/CUDA · bit-identity is the correctness bar</span></h2>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section>
+    <h2 class="sec">Frontiers <span>the memory–latency trades, measured</span></h2>
+    <div class="grid2">
+      <div class="panel">
+        <h3>RRR entropy frontier (M4)</h3>
+        <div class="cap">bits/bit vs plane density — skewed compresses toward H₀; max-entropy stays packed</div>
+        <canvas id="rrrChart" aria-label="RRR bits per bit versus density"></canvas>
+        <div class="tablewrap" id="rrrTable" style="margin-top:.8rem;"></div>
+      </div>
+      <div class="panel">
+        <h3>Rank directory (M3) &amp; price of addressability (M2)</h3>
+        <div class="cap">two-level rank vs linear; wavelet access vs raw GPU gather</div>
+        <div class="tablewrap" id="rankTable"></div>
+        <div class="tablewrap" id="frontierTable" style="margin-top:.9rem;"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="sec">How to read Python vs C++</h2>
+    <div class="note">
+      <b>Expect parity on ported kernels, not magic.</b> Same algorithm + same GPU means the CUDA kernel should
+      <em>match</em> the Warp kernel (M1: 1233 vs ~1240 M access/s) — the native engine is not "faster because
+      C++". Its wins come from <b>specialization</b> (compile-time level counts), <b>directory redesign</b>
+      (two-level rank, 1.6–1.8×), <b>entropy coding</b> (RRR, 2.2–2.8×), the <b>device-native API</b> (removes the
+      H2D/D2H tax the prototype is bound by), and <b>fusion where the avoided intermediate is large</b>. Absolute
+      nanoseconds are hardware-specific; the <b>shape</b> — parity, ratios, scaling — is the invariant that
+      carries to other GPUs.
+    </div>
+  </section>
+
+  <section>
+    <h2 class="sec">Prototype-only headlines <span>end-to-end results that live in the Python repo</span></h2>
+    <div class="protolist" id="proto"></div>
+  </section>
+
+  <section>
+    <h2 class="sec">Run it on your machine</h2>
+    <p class="sub" style="font-family:var(--sans);font-size:.92rem;max-width:46rem;">Results are hardware-specific.
+      Build on any NVIDIA GPU and the numbers slot into <span class="mono">benchmarks/results.json</span> as a new
+      machine — this page extends by adding data, not rewriting.</p>
+    <pre>make ARCH=sm_80 all                       # your GPU's arch
+make PYTHON=~/warp-solar-system-shaders/.venv/bin/python rrr   # M4 entropy frontier
+make PYTHON=... rank        # M3 two-level rank      make PYTHON=... bench    # M1 access
+make PYTHON=... experiment-a# M2 frontier            make PYTHON=... fused    # M6 fused vs unfused
+# then add a machine block to benchmarks/results.json and redeploy this dashboard.</pre>
+  </section>
+
+  <footer>
+    <span>chromoFold — compute-for-memory, where the GPU is memory-bound.</span>
+    <span id="foot-meta"></span>
+  </footer>
+</div>
+
+<script id="data" type="application/json">
+{
+  "schema": 1,
+  "note": "Measured benchmark ledger. Per machine, per milestone, Python/Warp prototype vs C++/CUDA native. Regenerate/extend when a milestone result changes or on a new machine. Feeds the comparison dashboard.",
+  "machines": [
+    {
+      "id": "rtx2080ti-sm75",
+      "gpu": "NVIDIA GeForce RTX 2080 Ti",
+      "arch": "sm_75",
+      "cuda": "12.6",
+      "warp": "1.15",
+      "note": "reference box (2x RTX 2080 Ti); no bf16 tensor cores",
+      "milestones": [
+        {"id": "M1", "name": "wavelet access", "status": "done", "correctness": "bit-identical",
+         "python": "1240 M/s (kernel)", "cpp": "1233 M/s (kernel), 367 M/s (round-trip)",
+         "compare": "parity kernel-to-kernel; native adds the device-native API that removes the round-trip",
+         "caveat": "user-facing path is transfer-bound; kernel is what counts in a serving loop"},
+        {"id": "M2", "name": "price of addressability", "status": "partial",
+         "correctness": "access bit-identical",
+         "python": "n/a", "cpp": "wavelet 1.7x-13.4x raw gather (uniform)",
+         "compare": "raw gather is the floor; wavelet buys rank/search + large-vocab footprint",
+         "caveat": "raw gather wins dense small-vocab uniform reads; sorted access halves the wavelet premium"},
+        {"id": "M3", "name": "wavelet rank + two-level directory", "status": "done", "correctness": "bit-identical",
+         "python": "linear directory", "cpp": "two-level 1.6x-1.8x faster than linear",
+         "compare": "native win is the directory redesign, not the language",
+         "caveat": "directory 4x larger but only ~1.35x the total index; a per-deployment knob"},
+        {"id": "M4", "name": "RRR rank1 (entropy frontier)", "status": "done", "correctness": "bit-identical",
+         "python": "same RRR encoding", "cpp": "skewed 2.2x-2.8x below packed, ~0.7 ns rank1",
+         "compare": "faithful port; combinatorial decode is nearly free",
+         "caveat": "max-entropy planes are BIGGER under RRR (keep packed) - the BWT profile"},
+        {"id": "M6", "name": "fused decode + embedding gather", "status": "partial", "correctness": "bit-identical",
+         "python": "decode-in-matmul: 10.6x less VRAM (weights, large intermediate)",
+         "cpp": "embedding gather: unfused wins at every dim (honest negative)",
+         "compare": "opposite ideal thread mappings; tiny intermediate = no memory win here",
+         "caveat": "fuse by how expensive the avoided intermediate is, not everything"}
+      ],
+      "detail": {
+        "frontier": {
+          "columns": ["vocab", "bits", "raw_B_per_tok", "wav_bits_per_tok", "pattern", "gather_ns", "wavelet_ns", "cost_x"],
+          "rows": [
+            [256, 8, 1, 9.00, "uniform", 0.12, 0.74, 6.3],
+            [256, 8, 1, 9.00, "sorted", 0.10, 0.28, 2.8],
+            [32768, 15, 2, 16.88, "uniform", 0.12, 1.31, 11.0],
+            [131072, 17, 4, 19.13, "uniform", 0.11, 1.47, 13.4],
+            [131072, 17, 4, 19.13, "sorted", 0.10, 0.67, 6.6]
+          ]
+        },
+        "rank": {
+          "columns": ["vocab", "bits", "linear_ns", "twolevel_ns", "speedup_x", "lin_dir_Bpw", "twolvl_dir_Bpw"],
+          "rows": [
+            [256, 8, 0.73, 0.45, 1.63, 0.50, 2.06],
+            [32768, 15, 1.46, 0.80, 1.82, 0.50, 2.06]
+          ]
+        },
+        "rrr": {
+          "columns": ["density", "H0", "RRR_bits_per_bit", "vs_packed_x", "rank1_ns"],
+          "rows": [
+            [0.50, 1.000, 1.167, 0.86, 0.84],
+            [0.10, 0.469, 0.669, 1.50, 0.71],
+            [0.03, 0.194, 0.447, 2.24, 0.66],
+            [0.005, 0.045, 0.353, 2.83, 0.63]
+          ]
+        }
+      }
+    }
+  ],
+  "prototype_headlines": [
+    {"area": "KV cache O(1)", "result": "window latency flat 1K->64K; 264x vs decode-all at 64K (Qwen2.5-1.5B); 8.9x VRAM"},
+    {"area": "KV quality", "result": "KIVI int4 attention MSE 1.5e-4"},
+    {"area": "weights", "result": "int4+class-Huffman ~1.33 b/w; SpQR outliers make int4 beat int8 accuracy at int8 size"},
+    {"area": "whole gpt2", "result": "int8 near-lossless; int4 needs group-128 AND int8 embedding (mixed precision)"},
+    {"area": "fused decode-in-matmul", "result": "10.6x less VRAM held during compute (Warp PoC)"},
+    {"area": "FM-index build", "result": "GPU suffix array 17-32x vs CPU, bit-identical"},
+    {"area": "speculative decoding", "result": "FM-index draft = 2.18x fewer gpt2 forward passes"},
+    {"area": "drop-in transformers KV cache", "result": "real Qwen2.5 generation, coherent, compressed prefix"}
+  ]
+}
+
+</script>
+<script>
+(function(){
+  "use strict";
+  var DB = JSON.parse(document.getElementById('data').textContent);
+  var sel = document.getElementById('machine');
+  DB.machines.forEach(function(m,idx){ var o=document.createElement('option'); o.value=idx; o.textContent=m.gpu+" ("+m.arch+")"; sel.appendChild(o); });
+
+  var css=getComputedStyle(document.documentElement); function c(v){return css.getPropertyValue(v).trim();}
+
+  function esc(s){return String(s).replace(/[&<>]/g,function(x){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[x];});}
+
+  function tableHTML(d){
+    var h='<table><thead><tr>'+d.columns.map(function(k){return '<th>'+esc(k)+'</th>';}).join('')+'</tr></thead><tbody>';
+    d.rows.forEach(function(r){ h+='<tr>'+r.map(function(v){return '<td>'+esc(v)+'</td>';}).join('')+'</tr>'; });
+    return h+'</tbody></table>';
+  }
+
+  function render(idx){
+    var m=DB.machines[idx];
+    document.getElementById('machine-meta').textContent='CUDA '+m.cuda+' · Warp '+m.warp+' · '+m.note;
+    document.getElementById('foot-meta').textContent=m.gpu+' · '+m.arch+' · CUDA '+m.cuda;
+
+    // KPIs
+    var done=m.milestones.filter(function(x){return x.status==='done';}).length;
+    var neg=m.milestones.filter(function(x){return /honest negative/.test(x.cpp)||/honest negative/.test(x.compare);}).length;
+    var kpis=[
+      ['<s>'+done+'</s>/'+m.milestones.length,'milestones with a native kernel'],
+      ['<s>bit-exact</s>','every ported kernel vs the Warp golden'],
+      ['<s>2.8×</s>','RRR below packed on skewed planes (M4)'],
+      ['<s>1.8×</s>','two-level rank vs linear (M3)']
+    ];
+    document.getElementById('kpis').innerHTML=kpis.map(function(k){return '<div class="kpi"><div class="n mono">'+k[0]+'</div><div class="l">'+k[1]+'</div></div>';}).join('');
+
+    // milestone cards
+    document.getElementById('cards').innerHTML=m.milestones.map(function(x){
+      var pill=x.status==='done'?'done':(x.status==='partial'?'partial':'todo');
+      return '<div class="card"><div class="top"><h3>'+esc(x.id)+' · '+esc(x.name)+'</h3>'+
+        '<span class="pill '+pill+'">'+esc(x.status)+'</span></div>'+
+        '<div class="mid">correctness: '+esc(x.correctness)+'</div>'+
+        '<div class="vs"><div class="lane py"><div class="k">Python / Warp</div><div class="v">'+esc(x.python)+'</div></div>'+
+        '<div class="lane cpp"><div class="k">C++ / CUDA</div><div class="v">'+esc(x.cpp)+'</div></div></div>'+
+        '<div class="compare">'+esc(x.compare)+'</div>'+
+        '<div class="caveat"><b>honest</b> '+esc(x.caveat)+'</div></div>';
+    }).join('');
+
+    // detail tables
+    document.getElementById('rankTable').innerHTML='<div class="cap mono" style="margin-bottom:.3rem;color:var(--faint)">rank directory (ns/query)</div>'+tableHTML(m.detail.rank);
+    document.getElementById('frontierTable').innerHTML='<div class="cap mono" style="margin:.6rem 0 .3rem;color:var(--faint)">price of addressability (ns/access)</div>'+tableHTML(m.detail.frontier);
+    document.getElementById('rrrTable').innerHTML=tableHTML(m.detail.rrr);
+
+    drawRRR(m.detail.rrr);
+  }
+
+  function drawRRR(d){
+    var cv=document.getElementById('rrrChart'); var ctx=cv.getContext('2d');
+    var W=cv.parentElement.clientWidth-2, H=180, dpr=Math.min(window.devicePixelRatio||1,2);
+    cv.width=W*dpr; cv.height=H*dpr; cv.style.height=H+'px'; ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.clearRect(0,0,W,H);
+    var pad={l:40,r:14,t:14,b:28};
+    // rows: [density,H0,bpb,vs,ns]; x=density (log), y=bits/bit
+    var rows=d.rows.slice().sort(function(a,b){return a[0]-b[0];});
+    var xs=rows.map(function(r){return Math.log10(r[0]);});
+    var xmin=Math.min.apply(null,xs), xmax=Math.max.apply(null,xs);
+    var ymax=1.3;
+    function X(lx){return pad.l+(W-pad.l-pad.r)*(lx-xmin)/(xmax-xmin);}
+    function Y(v){return H-pad.b-(H-pad.t-pad.b)*(v/ymax);}
+    ctx.font='10px '+c('--mono').replace(/"/g,'')+',monospace'; ctx.textBaseline='middle';
+    // gridlines at 0.5 (packed) and 1.0
+    [1.0,0.5].forEach(function(v){ var y=Y(v); ctx.strokeStyle=c('--grid');ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
+      ctx.fillStyle=c('--faint');ctx.textAlign='right';ctx.fillText(v.toFixed(1),pad.l-6,y);});
+    // "packed = 1.0" marker line already the top-ish; draw H0 curve (dashed) and bpb curve (copper)
+    function curve(get,col,dash){ ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash(dash||[]);ctx.beginPath();
+      rows.forEach(function(r,i){var x=X(Math.log10(r[0])),y=Y(get(r));i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();ctx.setLineDash([]); }
+    curve(function(r){return r[1];}, c('--faint'), [4,3]);    // H0
+    curve(function(r){return r[2];}, c('--cpp'));             // RRR bits/bit
+    rows.forEach(function(r){var x=X(Math.log10(r[0])),y=Y(r[2]);ctx.fillStyle=c('--cpp');ctx.beginPath();ctx.arc(x,y,3,0,7);ctx.fill();
+      ctx.fillStyle=c('--faint');ctx.textAlign='center';ctx.fillText(String(r[0]),x,H-pad.b+12);});
+    ctx.fillStyle=c('--cpp-ink');ctx.textAlign='left';ctx.fillText('RRR b/bit',X(xmin)+4,Y(rows[0][2])-10);
+    ctx.fillStyle=c('--faint');ctx.fillText('H₀',X(xmax)-16,Y(rows[rows.length-1][1])-9);
+    ctx.fillStyle=c('--faint');ctx.textAlign='center';ctx.fillText('density',(W)/2,H-4);
+  }
+
+  // proto headlines
+  document.getElementById('proto').innerHTML=DB.prototype_headlines.map(function(p){
+    return '<div class="proto"><div class="a">'+esc(p.area)+'</div><div class="r">'+esc(p.result)+'</div></div>';
+  }).join('');
+
+  sel.addEventListener('change',function(){render(+sel.value);});
+  render(0);
+  new MutationObserver(function(){css=getComputedStyle(document.documentElement);render(+sel.value);})
+    .observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+  window.addEventListener('resize',function(){render(+sel.value);});
+})();
+</script>

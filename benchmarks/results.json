@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "note": "Measured benchmark ledger. Per machine, per milestone, Python/Warp prototype vs C++/CUDA native. Regenerate/extend when a milestone result changes or on a new machine. Feeds the comparison dashboard.",
+  "machines": [
+    {
+      "id": "rtx2080ti-sm75",
+      "gpu": "NVIDIA GeForce RTX 2080 Ti",
+      "arch": "sm_75",
+      "cuda": "12.6",
+      "warp": "1.15",
+      "note": "reference box (2x RTX 2080 Ti); no bf16 tensor cores",
+      "milestones": [
+        {"id": "M1", "name": "wavelet access", "status": "done", "correctness": "bit-identical",
+         "python": "1240 M/s (kernel)", "cpp": "1233 M/s (kernel), 367 M/s (round-trip)",
+         "compare": "parity kernel-to-kernel; native adds the device-native API that removes the round-trip",
+         "caveat": "user-facing path is transfer-bound; kernel is what counts in a serving loop"},
+        {"id": "M2", "name": "price of addressability", "status": "partial",
+         "correctness": "access bit-identical",
+         "python": "n/a", "cpp": "wavelet 1.7x-13.4x raw gather (uniform)",
+         "compare": "raw gather is the floor; wavelet buys rank/search + large-vocab footprint",
+         "caveat": "raw gather wins dense small-vocab uniform reads; sorted access halves the wavelet premium"},
+        {"id": "M3", "name": "wavelet rank + two-level directory", "status": "done", "correctness": "bit-identical",
+         "python": "linear directory", "cpp": "two-level 1.6x-1.8x faster than linear",
+         "compare": "native win is the directory redesign, not the language",
+         "caveat": "directory 4x larger but only ~1.35x the total index; a per-deployment knob"},
+        {"id": "M4", "name": "RRR rank1 (entropy frontier)", "status": "done", "correctness": "bit-identical",
+         "python": "same RRR encoding", "cpp": "skewed 2.2x-2.8x below packed, ~0.7 ns rank1",
+         "compare": "faithful port; combinatorial decode is nearly free",
+         "caveat": "max-entropy planes are BIGGER under RRR (keep packed) - the BWT profile"},
+        {"id": "M6", "name": "fused decode + embedding gather", "status": "partial", "correctness": "bit-identical",
+         "python": "decode-in-matmul: 10.6x less VRAM (weights, large intermediate)",
+         "cpp": "embedding gather: unfused wins at every dim (honest negative)",
+         "compare": "opposite ideal thread mappings; tiny intermediate = no memory win here",
+         "caveat": "fuse by how expensive the avoided intermediate is, not everything"}
+      ],
+      "detail": {
+        "frontier": {
+          "columns": ["vocab", "bits", "raw_B_per_tok", "wav_bits_per_tok", "pattern", "gather_ns", "wavelet_ns", "cost_x"],
+          "rows": [
+            [256, 8, 1, 9.00, "uniform", 0.12, 0.74, 6.3],
+            [256, 8, 1, 9.00, "sorted", 0.10, 0.28, 2.8],
+            [32768, 15, 2, 16.88, "uniform", 0.12, 1.31, 11.0],
+            [131072, 17, 4, 19.13, "uniform", 0.11, 1.47, 13.4],
+            [131072, 17, 4, 19.13, "sorted", 0.10, 0.67, 6.6]
+          ]
+        },
+        "rank": {
+          "columns": ["vocab", "bits", "linear_ns", "twolevel_ns", "speedup_x", "lin_dir_Bpw", "twolvl_dir_Bpw"],
+          "rows": [
+            [256, 8, 0.73, 0.45, 1.63, 0.50, 2.06],
+            [32768, 15, 1.46, 0.80, 1.82, 0.50, 2.06]
+          ]
+        },
+        "rrr": {
+          "columns": ["density", "H0", "RRR_bits_per_bit", "vs_packed_x", "rank1_ns"],
+          "rows": [
+            [0.50, 1.000, 1.167, 0.86, 0.84],
+            [0.10, 0.469, 0.669, 1.50, 0.71],
+            [0.03, 0.194, 0.447, 2.24, 0.66],
+            [0.005, 0.045, 0.353, 2.83, 0.63]
+          ]
+        }
+      }
+    }
+  ],
+  "prototype_headlines": [
+    {"area": "KV cache O(1)", "result": "window latency flat 1K->64K; 264x vs decode-all at 64K (Qwen2.5-1.5B); 8.9x VRAM"},
+    {"area": "KV quality", "result": "KIVI int4 attention MSE 1.5e-4"},
+    {"area": "weights", "result": "int4+class-Huffman ~1.33 b/w; SpQR outliers make int4 beat int8 accuracy at int8 size"},
+    {"area": "whole gpt2", "result": "int8 near-lossless; int4 needs group-128 AND int8 embedding (mixed precision)"},
+    {"area": "fused decode-in-matmul", "result": "10.6x less VRAM held during compute (Warp PoC)"},
+    {"area": "FM-index build", "result": "GPU suffix array 17-32x vs CPU, bit-identical"},
+    {"area": "speculative decoding", "result": "FM-index draft = 2.18x fewer gpt2 forward passes"},
+    {"area": "drop-in transformers KV cache", "result": "real Qwen2.5 generation, coherent, compressed prefix"}
+  ]
+}

@@ -21,6 +21,14 @@ model ops.
 never exists. The proof is not a compression ratio; it is a real LLM fitting a larger batch or context in the
 same GPU memory at equal-or-better latency.
 
+## Start here (AI or human onboarding)
+
+- [`CLAUDE.md`](CLAUDE.md) / [`AGENTS.md`](AGENTS.md) — how to build, current status, gotchas, the non-negotiables.
+- [`docs/PROJECT_SYNC.md`](docs/PROJECT_SYNC.md) — how this native engine and the Python/Warp prototype
+  (`~/warp-solar-system-shaders`) stay in sync and get compared.
+- [`benchmarks/results.json`](benchmarks/results.json) — the measured ledger (per machine, Python vs C++), and
+  [`benchmarks/dashboard.html`](benchmarks/dashboard.html) — the comparison dashboard it feeds.
+
 ## Planning & specification
 
 Spec-driven development artifacts live in [`specs/`](specs/) — read the [index](specs/README.md) first:
