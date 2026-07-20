@@ -58,6 +58,9 @@ compile_commands.json
 *.bak
 *.swp
 
+# frozen reference vectors (regenerate with `make reference`)
+*.cfwv
+
 # vcpkg
 vcpkg_installed/
 

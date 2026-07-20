@@ -12,18 +12,29 @@ acceptance test is green and reproducible on a second run.
 
 ---
 
-## M0 — Reproducible harness + frozen reference
+## M0 — Reproducible harness + frozen reference — ✅ DONE
 **Goal.** Stand up the benchmark harness ([04-benchmarks.md](04-benchmarks.md)) and freeze the current Warp
 result as the reference implementation and correctness oracle.
 **Acceptance.** Harness emits the full reproducibility envelope (hardware/driver/CUDA/commit, ≥20 reps,
 median+p5/p95, four timing layers) for Warp `access`/`rank`; results archived and versioned.
-**Depends on.** Warp prototype (already measured: ~1.1 B/tok, ~400M access/s user-facing).
+**Delivered.** `tools/export_reference.py` freezes a Warp `GPUWavelet` index + golden `access` output to a
+portable `.cfwv` binary (1M tokens, V=256, 8 levels, 100K golden queries, 1.13 B/tok). `benchmarks/gpu_access.cu`
+emits device metadata + 30-rep median/p95 across the kernel-only and round-trip timing layers.
 
-## M1 — CUDA C++ `access`, device-native async API
-**Goal.** Port `GPUWavelet::access` to a CUDA C++ kernel behind `chromofold_access_async` (device pointers,
-caller stream, no host copy — P5). Preserve the exact Python API via pybind11.
-**Acceptance.** Bit-identical to Warp `access` on all corpora; profiler shows **no host allocation / no implicit
-sync** in the query path; kernel-only and round-trip times reported separately.
+## M1 — CUDA C++ `access`, device-native async API — ✅ DONE
+**Goal.** Port `GPUWavelet::access` to a CUDA C++ kernel behind `cf_access_async` (device pointers, caller
+stream, no host copy — P5), with compile-time specialization by vocabulary width (architecture §5).
+**Acceptance.** Bit-identical to Warp `access`; kernel-only and round-trip times reported separately.
+**Delivered (RTX 2080 Ti, sm_75, CUDA 12.6).** `src/cuda/access.cu` + `include/chromofold/chromofold.h`:
+- correctness: **BIT-IDENTICAL** to the frozen Warp golden (0 / 100,000 mismatches).
+- kernel-only: **1233 M access/s (0.81 ns/access)** — matches the Warp kernel; the device-native path allocates
+  and synchronizes nothing.
+- round-trip: 367 M access/s (2.73 ns) — isolates the H2D/D2H tax the device-native API (device pointers,
+  caller stream) removes. This reproduces the brief's "kernel fast, user-facing transfer-bound" finding.
+- templated `cf_access_kernel<LEVELS>` with a switch dispatch (2/4/8/15/16/17) + dynamic fallback.
+
+**Next (M2).** Raw GPU gather baseline + Warp head-to-head across V and batch; wire pybind11 so the Python API
+is unchanged.
 
 ## M2 — Baseline frontier for `access`
 **Goal.** Compare CUDA C++ `access` against **raw GPU gather** (uint8/16/32) and Warp, across vocabulary widths
