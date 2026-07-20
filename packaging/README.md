@@ -15,15 +15,22 @@ does not modify the engine's kernels or the top-level build.
   views, `.cfwv`/`.cfrr`/`.cfrw` fixture formats, the honest-degrade contract (`CHROMOFOLD_ROOT` defaulting to
   `WARP_SHADERS_ROOT`), and the offline guarantee stated as a *contract to test*. This is the source-of-truth a
   consumer commits so a box with no ChromoFold checkout degrades honestly (exit-3), never fabricates success.
-- **`conformance.c`** — a **pure-seam** conformance test: it links the `.so` and asserts every entry point is
-  exported, the signatures match, and the NULL-argument error contract holds — **without a GPU or driver** (the
-  argument guards return `CF_ERR_INVALID_ARGUMENT` before any CUDA call). This is the CI seam for a box without
-  SAIN-01 hardware (SDD-500 Q-500-C: hardware steps gated, pure seams CI-tested).
+- **`conformance.c`** — the **FFI-signature seam**: links the `.so` and asserts every entry point is exported,
+  the signatures match, and the NULL-argument error contract holds — **without a GPU or driver** (the argument
+  guards return `CF_ERR_INVALID_ARGUMENT` before any CUDA call).
+- **`seam_check.c` + `fixtures/tiny.cf{wv,rr,rw}`** — the **`.cfold`-header seam**: small committed reference
+  fixtures (1–10 KB, golden-verified) and a pure-CPU reader that validates each one's stable header prefix
+  (4-byte magic + `u32` version) with **no CUDA at all**.
+
+Together these are SDD-500 Q-500-C's "pure seams" (descriptor parse via the JSON, FFI-signature, `.cfold`
+header) — everything a CI job on a box **without** SAIN-01 hardware can run; the GPU functional run is gated
+elsewhere.
 
 ## Build
 ```sh
 make lib          # -> build/libchromofold.so   (nvcc; ARCH?=sm_75, override for other GPUs)
-make conformance  # build the .so + link the C seam test + run it (no GPU needed)
+make conformance  # link the FFI-signature seam test + run it (no GPU)
+make seams        # conformance + the .cfold-header seam over the committed fixtures (no GPU) — the full seam suite
 ```
 
 ## ABI at a glance (v0)

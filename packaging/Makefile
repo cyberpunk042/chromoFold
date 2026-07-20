@@ -19,18 +19,33 @@ SRC := access.cu rank.cu rrr.cu rrr_wavelet.cu fm_search.cu fused_embedding.cu f
 CU  := $(addprefix $(ROOT)/src/cuda/,$(SRC))
 BUILD := build
 
-.PHONY: all lib conformance clean
-all: conformance
+FIXTURES := fixtures/tiny.cfwv fixtures/tiny.cfrr fixtures/tiny.cfrw
+
+.PHONY: all lib conformance seam-check seams clean
+all: seams
 
 lib: $(BUILD)/libchromofold.so
 $(BUILD)/libchromofold.so: $(CU)
 	@mkdir -p $(BUILD)
 	$(NVCC) $(NVFLAGS) -shared $(CU) -o $@
 
+# FFI-signature seam: links the .so, asserts entry points export + the NULL-arg contract (no GPU)
 conformance: $(BUILD)/libchromofold.so conformance.c
 	$(CC) -std=c11 $(INC) conformance.c -L$(BUILD) -lchromofold -L$(CUDA_LIB) -lcudart \
 	  -Wl,-rpath,$(BUILD) -Wl,-rpath,$(CUDA_LIB) -o $(BUILD)/conformance
 	$(BUILD)/conformance
+
+# .cfold-header seam: validates fixture magic + version (pure CPU, no CUDA at all)
+seam-check: $(BUILD)/seam_check
+$(BUILD)/seam_check: seam_check.c
+	@mkdir -p $(BUILD)
+	$(CC) -std=c11 seam_check.c -o $@
+
+# the full Q-500-C pure-seam suite (both run with no GPU); the hardware/GPU functional run is gated elsewhere
+seams: conformance $(BUILD)/seam_check
+	@echo "-- .cfold header seam --"
+	@for fx in $(FIXTURES); do $(BUILD)/seam_check $$fx || exit 1; done
+	@echo "seams: PASS"
 
 clean:
 	rm -rf $(BUILD)

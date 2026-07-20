@@ -38,9 +38,10 @@
     {"id": "fm_locate", "header": "chromofold_search.h", "fn": "cf_fm_locate_async", "view": "cf_fm_view", "desc": "FM-index locate (text positions of occurrences)"}
   ],
   "reference_fixtures": [
-    {"ext": ".cfwv", "desc": "frozen packed-wavelet index + golden access output (Warp reference vector)"},
-    {"ext": ".cfrr", "desc": "RRR bitvector reference + golden rank1"},
-    {"ext": ".cfrw", "desc": "RRR-backed wavelet reference (BWT'd stream) + golden access/rank"}
+    {"ext": ".cfwv", "magic": "CFWV", "version": 3, "fixture": "packaging/fixtures/tiny.cfwv", "desc": "frozen packed-wavelet index + golden access output (Warp reference vector)"},
+    {"ext": ".cfrr", "magic": "CFRR", "version": 1, "fixture": "packaging/fixtures/tiny.cfrr", "desc": "RRR bitvector reference + golden rank1"},
+    {"ext": ".cfrw", "magic": "CFRW", "version": 1, "fixture": "packaging/fixtures/tiny.cfrw", "desc": "RRR-backed wavelet reference (BWT'd stream) + golden access/rank"}
   ],
+  "header_seam": "each fixture begins with a 4-byte ASCII magic + u32 little-endian version; packaging/seam_check.c validates this without a GPU (the .cfold-header pure seam)",
   "sdd": "sovereign-os docs/sdd/500-chromofold-compressed-domain-integration.md"
 }
