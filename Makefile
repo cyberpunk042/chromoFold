@@ -11,9 +11,9 @@ BUILD = build
 REFS  = benchmarks/refs
 VOCABS = 4 16 256 32768 65536 131072
 
-.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet
+.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet fm-search
 
-all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet
+all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet $(BUILD)/fm_search
 
 $(BUILD)/gpu_access: benchmarks/gpu_access.cu benchmarks/reference_io.h src/cuda/access.cu include/chromofold/chromofold.h
 	@mkdir -p $(BUILD)
@@ -38,6 +38,10 @@ $(BUILD)/rrr_bench: benchmarks/rrr_bench.cu src/cuda/rrr.cu include/chromofold/c
 $(BUILD)/rrr_wavelet: benchmarks/rrr_wavelet.cu src/cuda/rrr_wavelet.cu include/chromofold/chromofold.h include/chromofold/detail/rrr_wavelet_device.cuh
 	@mkdir -p $(BUILD)
 	$(NVCC) $(NVFLAGS) benchmarks/rrr_wavelet.cu src/cuda/rrr_wavelet.cu -o $@
+
+$(BUILD)/fm_search: benchmarks/fm_search.cu src/cuda/fm_search.cu include/chromofold/detail/fm_search_device.cuh include/chromofold/detail/rrr_wavelet_device.cuh include/chromofold/detail/access_device.cuh
+	@mkdir -p $(BUILD)
+	$(NVCC) $(NVFLAGS) benchmarks/fm_search.cu src/cuda/fm_search.cu -o $@
 
 # M1: freeze the default reference vector and verify the CUDA access kernel against it
 reference: tools/export_reference.py
@@ -82,6 +86,15 @@ rrr-wavelet: $(BUILD)/rrr_wavelet
 	  test -f $(REFS)/rrw_V$$v.cfrw || $(PYTHON) tools/export_rrr_wavelet.py $(REFS)/rrw_V$$v.cfrw --vocab $$v >/dev/null; \
 	done
 	$(BUILD)/rrr_wavelet $(REFS)/rrw_V64.cfrw $(REFS)/rrw_V256.cfrw
+
+# M7: FM-index count + locate over the RRR-backed BWT wavelet — verify vs ground truth + batched throughput
+FM_VOCABS = 64 256
+fm-search: $(BUILD)/fm_search
+	@mkdir -p $(REFS)
+	@for v in $(FM_VOCABS); do \
+	  test -f $(REFS)/fm_V$$v.cffm || $(PYTHON) tools/export_fm_index.py $(REFS)/fm_V$$v.cffm --vocab $$v >/dev/null; \
+	done
+	$(BUILD)/fm_search $(REFS)/fm_V64.cffm $(REFS)/fm_V256.cffm
 
 # M6: fused decode+embedding-gather vs unfused (Experiment D). Reuses the V=32768 reference.
 fused: $(BUILD)/fused_embedding

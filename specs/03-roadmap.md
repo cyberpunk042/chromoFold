@@ -137,10 +137,36 @@ expensive the intermediate is, not by fusing everything.* Embedding gather was t
 **Next.** Re-target the fused demonstration at a large-intermediate op: **decode + KV-dequant** (avoids a big
 dequantized KV tile) or **RRR-decode + sparse gather**. This is where fusion's memory win is real.
 
-## M7 — FM backward-search + locate on GPU
+## M7 — FM backward-search + locate on GPU — ✅ DONE (count + locate, over the RRR index)
 **Goal.** Port `count`/`locate` (backward search over the RRR/BWT wavelet). The Warp prototype already builds the
 suffix array on-GPU (17–32× CPU) and does GPU count/locate/predict_next.
-**Acceptance.** Search results bit-identical to CPU FM-index; latency + reproducibility envelope recorded.
+**Delivered (`src/cuda/fm_search.cu`, `include/chromofold/detail/fm_search_device.cuh`,
+`benchmarks/fm_search.cu`).** FM-index backward search running GPU-resident over the **M4 RRR-backed BWT wavelet**
+— the same compact, entropy-sized index is now decoded, searched, and (via batched count) sampled from without
+leaving VRAM. Three device-native entry points, all riding the header-only `cf_rrrw_*` inlines (P3):
+- `cf_fm_count_async` — backward search, one thread/pattern (parallel across a batch).
+- `cf_fm_ranges_async` — the SA range `[lo, hi)` per pattern (locate's first stage).
+- `cf_fm_locate_async` — one LF-walk thread per occurrence over a **succinct sampled suffix array** (packed mark
+  plane ranked by `cf_rank1` + sampled SA values); `text_pos = (SA[sampled] + steps) mod n`.
+
+New `.cffm` v1 reference bundles the RRR-wavelet arrays + FM `C[]` + the SA sample, with golden count **and**
+locate computed by **naive ground-truth matching** (stronger than a prototype match — the prototype's *RRR*
+FM-index exposes count only; native RRR-backed **locate** is verified against truth).
+
+**Result (RTX 2080 Ti, 2M-token BWT), both count and locate BIT-IDENTICAL to ground truth:**
+| vocab | levels | index | count (200K patterns) | locate |
+|---|---|---|---|---|
+| 64 | 7 | 1.45 MB | **18.5 M patterns/s** | correct (4264 occ) |
+| 256 | 9 | 2.02 MB | **19.0 M patterns/s** | correct (538 occ) |
+
+count is internally consistent with M4: ~52 ns/pattern ÷ 8 rank calls (len-4 pattern × 2) ≈ 6.5 ns/rank, matching
+the 6.9 ns RRR-wavelet rank. **Honest caveats:** (1) each locate LF step is a *full* RRR access + rank walk (≤
+`sa_sample`=16 steps), so locate is decode-heavy — the entropy index's price on the walk. (2) The measured locate
+ns/occurrence (0.9–9.7 µs) is **overhead-dominated**, not throughput: only 538–4264 occurrences means 538–4264
+threads, which badly underutilizes the GPU; a representative locate-throughput number needs a large occurrence
+batch (deferred). count, batched to 200K patterns, is the well-utilized figure. **Next:** `predict_next` is just a
+batched count over candidate next-tokens (host-side today); a locate-throughput sweep; and GPU suffix-array build
+(M5) to close the last host straggler.
 
 ## M8 — Reference-delta apply + shared-prefix serving demo
 **Goal.** Port delta-apply; build the shared-prefix prompt-cache demonstration (Experiment B: N requests, one
