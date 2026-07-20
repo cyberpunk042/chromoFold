@@ -40,8 +40,10 @@
   "reference_fixtures": [
     {"ext": ".cfwv", "magic": "CFWV", "version": 3, "fixture": "packaging/fixtures/tiny.cfwv", "desc": "frozen packed-wavelet index + golden access output (Warp reference vector)"},
     {"ext": ".cfrr", "magic": "CFRR", "version": 1, "fixture": "packaging/fixtures/tiny.cfrr", "desc": "RRR bitvector reference + golden rank1"},
-    {"ext": ".cfrw", "magic": "CFRW", "version": 1, "fixture": "packaging/fixtures/tiny.cfrw", "desc": "RRR-backed wavelet reference (BWT'd stream) + golden access/rank"}
+    {"ext": ".cfrw", "magic": "CFRW", "version": 1, "fixture": "packaging/fixtures/tiny.cfrw", "desc": "RRR-backed wavelet reference (BWT'd stream) + golden access/rank"},
+    {"ext": ".cffm", "magic": "CFFM", "version": 1, "fixture": "packaging/fixtures/tiny.cffm", "desc": "FM-index reference (RRR-backed BWT wavelet + C-table + sampled SA) + golden count/locate"}
   ],
   "header_seam": "each fixture begins with a 4-byte ASCII magic + u32 little-endian version; packaging/seam_check.c validates this without a GPU (the .cfold-header pure seam)",
+  "functional_test": "packaging/functional.cu runs cf_fm_count/ranges/locate through libchromofold.so against fixtures/tiny.cffm, verified bit-identical to golden (the GPU-gated half of Q-500-C)",
   "sdd": "sovereign-os docs/sdd/500-chromofold-compressed-domain-integration.md"
 }

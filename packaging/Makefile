@@ -21,7 +21,7 @@ BUILD := build
 
 FIXTURES := fixtures/tiny.cfwv fixtures/tiny.cfrr fixtures/tiny.cfrw
 
-.PHONY: all lib conformance seam-check seams clean
+.PHONY: all lib conformance seam-check seams functional clean
 all: seams
 
 lib: $(BUILD)/libchromofold.so
@@ -46,6 +46,12 @@ seams: conformance $(BUILD)/seam_check
 	@echo "-- .cfold header seam --"
 	@for fx in $(FIXTURES); do $(BUILD)/seam_check $$fx || exit 1; done
 	@echo "seams: PASS"
+
+# GPU FUNCTIONAL run (hardware-gated): FM-index search through the .so, verified vs the fixture's golden
+functional: $(BUILD)/libchromofold.so functional.cu fixtures/tiny.cffm
+	$(NVCC) -O3 -std=c++17 -arch=$(ARCH) $(INC) functional.cu -L$(BUILD) -lchromofold \
+	  -o $(BUILD)/functional -Xlinker -rpath -Xlinker $(BUILD) -Xlinker -rpath -Xlinker $(CUDA_LIB)
+	$(BUILD)/functional fixtures/tiny.cffm
 
 clean:
 	rm -rf $(BUILD)

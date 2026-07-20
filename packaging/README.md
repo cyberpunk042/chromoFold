@@ -23,14 +23,20 @@ does not modify the engine's kernels or the top-level build.
   (4-byte magic + `u32` version) with **no CUDA at all**.
 
 Together these are SDD-500 Q-500-C's "pure seams" (descriptor parse via the JSON, FFI-signature, `.cfold`
-header) — everything a CI job on a box **without** SAIN-01 hardware can run; the GPU functional run is gated
-elsewhere.
+header) — everything a CI job on a box **without** SAIN-01 hardware can run.
+
+- **`functional.cu` + `fixtures/tiny.cffm`** — the **GPU functional run** (hardware-gated half of Q-500-C):
+  loads a committed FM-index fixture, builds a `cf_fm_view`, and calls `cf_fm_count` / `cf_fm_ranges` /
+  `cf_fm_locate` **through the shared library**, verifying the results bit-identical to the fixture's golden.
+  This proves the packaged `.so` *does compressed-domain search correctly* across the FFI boundary — not just
+  that its symbols link. Requires an NVIDIA GPU.
 
 ## Build
 ```sh
 make lib          # -> build/libchromofold.so   (nvcc; ARCH?=sm_75, override for other GPUs)
 make conformance  # link the FFI-signature seam test + run it (no GPU)
 make seams        # conformance + the .cfold-header seam over the committed fixtures (no GPU) — the full seam suite
+make functional   # GPU: FM-index count/locate through the .so, verified vs golden (hardware-gated)
 ```
 
 ## ABI at a glance (v0)
