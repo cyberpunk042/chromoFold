@@ -1,5 +1,10 @@
 # ChromoFold — Specification Set (SDD)
 
+> **New here?** These are the formal design docs. For a plain-language introduction start with the
+> [top-level README](../README.md), then [`docs/CONCEPTS.md`](../docs/CONCEPTS.md) (how it works),
+> [`docs/GLOSSARY.md`](../docs/GLOSSARY.md) (every term defined), and [`docs/RESULTS.md`](../docs/RESULTS.md)
+> (what was measured). The documents below are the authoritative "why/what/when."
+
 Spec-driven development artifacts for the native ChromoFold engine. Read in order; each governs the next.
 Grounded in the **ChromoFold Research Brief (July 2026)** and the measured Warp prototype
 (`warp-solar-system-shaders/warp_compress`, 341 tests).
@@ -26,8 +31,11 @@ equal-or-better latency (P10).
 ## Status
 
 - **Prototype:** measured, honest, 341 tests (Warp). It validates the primitives and is the correctness oracle.
-- **Native engine:** specified here; implementation begins at **M0** (reproducible harness + frozen reference),
-  then **M1** (CUDA C++ `access`, device-native async API). Do not skip the credibility gate (M0–M2).
+- **Native engine:** M0–M8 largely implemented and bit-verified (read, rank, the RRR searchable index, rANS,
+  FM-index search, the fused consumers, delta-cluster dedup, and a native + GPU build path). See
+  [03-roadmap.md](03-roadmap.md) for the milestone-by-milestone log and measured numbers, or
+  [`../docs/RESULTS.md`](../docs/RESULTS.md) for the plain-language summary. The remaining decisive step is **M9**
+  (the real-model workload proof).
 
 ## Reference
 
