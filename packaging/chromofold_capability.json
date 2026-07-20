@@ -6,7 +6,7 @@
   "header_search": "chromofold/chromofold_search.h",
   "license": "MIT",
   "note": "ChromoFold native query engine — GPU-resident, random-access, searchable compression for LLM data. Composes ON TOP OF quantization (lossless entropy + index layer, not a quantizer). No telemetry, no license server, no network I/O in the core.",
-  "positioning": "complementary, opt-in, OFF by default. Land only the net-new column (GPU entropy+random-access layer, compressed-domain FM-index search, .cfold container). Does NOT replace sovereign-os kv/quant/compress/moe reference controllers.",
+  "positioning": "complementary, opt-in, OFF by default. Land only the net-new column (GPU entropy+random-access layer, compressed-domain FM-index search, fused compressed-KV consumption, .cfold container). Does NOT replace sovereign-os kv/quant/compress/moe reference controllers.",
   "honest_degrade": {
     "root_env": "CHROMOFOLD_ROOT",
     "root_default_env": "WARP_SHADERS_ROOT",
@@ -22,7 +22,7 @@
     "conformance_requires_gpu": false
   },
   "abi_contract": {
-    "device_native": "all view pointers are DEVICE pointers; queries run on the caller's stream (void* cudaStream_t, NULL = default); no host allocation, no implicit synchronization, no PCIe round trip",
+    "device_native": "all view and tensor pointers are DEVICE pointers; queries run on the caller's stream (void* cudaStream_t, NULL = default); no host allocation, no implicit synchronization, no PCIe round trip",
     "views_repr_c": "cf_wavelet_view / cf_rrrw_view / cf_fm_view are POD, #[repr(C)]-safe, passed by value",
     "errors": {"CF_OK": 0, "CF_ERR_INVALID_ARGUMENT": 1, "CF_ERR_UNSUPPORTED": 2, "CF_ERR_CUDA": 3},
     "null_arg_contract": "every entry point returns CF_ERR_INVALID_ARGUMENT on a NULL required pointer BEFORE any CUDA call (the seam a no-GPU CI validates)"
@@ -31,6 +31,8 @@
     {"id": "wavelet_access", "header": "chromofold.h", "fn": "cf_access_async", "view": "cf_wavelet_view", "desc": "packed-wavelet random access (token decode)"},
     {"id": "wavelet_rank", "header": "chromofold.h", "fn": "cf_rank_async", "view": "cf_wavelet_view", "desc": "packed-wavelet rank (FM primitive)"},
     {"id": "embedding_gather", "header": "chromofold.h", "fn": "cf_embedding_gather_async", "view": "cf_wavelet_view", "desc": "fused decode + embedding gather (no decompressed token buffer)"},
+    {"id": "kv_attention_fused", "header": "chromofold.h", "fn": "cf_kv_attn_fused_async", "desc": "causal windowed attention over block-Huffman int4 K/V; decode and dequantize inside the consumer so dense KV tiles never exist"},
+    {"id": "kv_attention_dense_reference", "header": "chromofold.h", "fn": "cf_kv_attn_dense_async", "desc": "verification baseline that materializes caller-provided dense fp32 K/V scratch before the same attention computation"},
     {"id": "rrrw_access", "header": "chromofold_search.h", "fn": "cf_rrrw_access_async", "view": "cf_rrrw_view", "desc": "entropy-sized RRR self-index access (BWT below H0)"},
     {"id": "rrrw_rank", "header": "chromofold_search.h", "fn": "cf_rrrw_rank_async", "view": "cf_rrrw_view", "desc": "entropy-sized RRR self-index rank"},
     {"id": "fm_count", "header": "chromofold_search.h", "fn": "cf_fm_count_async", "view": "cf_fm_view", "desc": "FM-index backward-search count in the compressed domain — the net-new capability with NO analogue in a plain KV/quant stack", "sovereign_os_first": true},

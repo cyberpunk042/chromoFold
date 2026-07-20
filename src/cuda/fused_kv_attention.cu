@@ -12,9 +12,6 @@
 #include <cuda_runtime.h>
 #include <math.h>
 
-#define KV_DMAX 128  // max head dim held in registers
-#define KV_WMAX 512  // max window (per-query score scratch)
-
 // advance to the block-Huffman bit position of flat element `flat` (its block start + a mid-block skip decode).
 __device__ __forceinline__ int cf_kv_row_pos(const uint32_t *words, const int32_t *boff, const int32_t *lut,
                                              int maxlen, int block, long flat) {
@@ -32,11 +29,11 @@ __global__ void cf_kv_attn_fused_kernel(const uint32_t *kw, const int32_t *kb, c
                                         int seq, int dim, int nq, int window, int block, int zero, float sscale) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= nq) return;
-  float qi[KV_DMAX];
+  float qi[CF_KV_MAX_HEAD_DIM];
   for (int c = 0; c < dim; ++c) qi[c] = Q[(long)i * dim + c];
   int lo = i - window + 1; if (lo < 0) lo = 0;
   int nk = i - lo + 1;
-  float sc[KV_WMAX];
+  float sc[CF_KV_MAX_WINDOW];
   float mx = -1e30f;
   for (int jj = 0; jj < nk; ++jj) {                        // pass 1: scores = Q·dequant(K[j]) (decode K inline)
     int j = lo + jj;
@@ -53,7 +50,7 @@ __global__ void cf_kv_attn_fused_kernel(const uint32_t *kw, const int32_t *kb, c
   float sum = 0.f;
   for (int jj = 0; jj < nk; ++jj) { sc[jj] = expf(sc[jj] - mx); sum += sc[jj]; }
   float inv = 1.f / sum;
-  float acc[KV_DMAX];
+  float acc[CF_KV_MAX_HEAD_DIM];
   for (int c = 0; c < dim; ++c) acc[c] = 0.f;
   for (int jj = 0; jj < nk; ++jj) {                        // pass 2: out = Σ softmax · dequant(V[j]) (decode V inline)
     int j = lo + jj;
@@ -88,11 +85,11 @@ __global__ void cf_kv_attn_dense_kernel(const float *Kd, const float *Vd, const 
                                         int dim, int nq, int window, float sscale) {
   int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= nq) return;
-  float qi[KV_DMAX];
+  float qi[CF_KV_MAX_HEAD_DIM];
   for (int c = 0; c < dim; ++c) qi[c] = Q[(long)i * dim + c];
   int lo = i - window + 1; if (lo < 0) lo = 0;
   int nk = i - lo + 1;
-  float sc[KV_WMAX];
+  float sc[CF_KV_MAX_WINDOW];
   float mx = -1e30f;
   for (int jj = 0; jj < nk; ++jj) {
     int j = lo + jj;
@@ -105,7 +102,7 @@ __global__ void cf_kv_attn_dense_kernel(const float *Kd, const float *Vd, const 
   float sum = 0.f;
   for (int jj = 0; jj < nk; ++jj) { sc[jj] = expf(sc[jj] - mx); sum += sc[jj]; }
   float inv = 1.f / sum;
-  float acc[KV_DMAX];
+  float acc[CF_KV_MAX_HEAD_DIM];
   for (int c = 0; c < dim; ++c) acc[c] = 0.f;
   for (int jj = 0; jj < nk; ++jj) {
     int j = lo + jj;
@@ -115,13 +112,27 @@ __global__ void cf_kv_attn_dense_kernel(const float *Kd, const float *Vd, const 
   for (int c = 0; c < dim; ++c) out[(long)i * dim + c] = acc[c];
 }
 
+static cf_status cf_validate_kv_args(const uint32_t *kw, const int32_t *kb, const int32_t *kl, int kmax,
+                                     const uint32_t *vw, const int32_t *vb, const int32_t *vl, int vmax,
+                                     const float *kscale, const float *vscale, const float *Q, const float *out,
+                                     int seq, int dim, int nq, int window, int block, float sscale) {
+  if (!kw || !kb || !kl || !vw || !vb || !vl || !kscale || !vscale || !Q || !out)
+    return CF_ERR_INVALID_ARGUMENT;
+  if (seq <= 0 || dim <= 0 || nq < 0 || nq > seq || window <= 0 || block <= 0 || kmax <= 0 || vmax <= 0)
+    return CF_ERR_INVALID_ARGUMENT;
+  if (!isfinite(sscale)) return CF_ERR_INVALID_ARGUMENT;
+  if (dim > CF_KV_MAX_HEAD_DIM || window > CF_KV_MAX_WINDOW) return CF_ERR_UNSUPPORTED;
+  return CF_OK;
+}
+
 extern "C" cf_status cf_kv_attn_fused_async(const uint32_t *kw, const int32_t *kb, const int32_t *kl, int kmax,
                                             const uint32_t *vw, const int32_t *vb, const int32_t *vl, int vmax,
                                             const float *kscale, const float *vscale, const float *Q, float *out,
                                             int seq, int dim, int nq, int window, int block, int zero, float sscale,
                                             void *stream) {
-  if (!kw || !vw || !Q || !out) return CF_ERR_INVALID_ARGUMENT;
-  if (dim > KV_DMAX || window > KV_WMAX) return CF_ERR_UNSUPPORTED;
+  cf_status valid = cf_validate_kv_args(kw, kb, kl, kmax, vw, vb, vl, vmax, kscale, vscale, Q, out,
+                                        seq, dim, nq, window, block, sscale);
+  if (valid != CF_OK) return valid;
   if (nq == 0) return CF_OK;
   cudaStream_t s = reinterpret_cast<cudaStream_t>(stream);
   const int t = 64;
@@ -136,8 +147,10 @@ extern "C" cf_status cf_kv_attn_dense_async(const uint32_t *kw, const int32_t *k
                                             const float *kscale, const float *vscale, const float *Q, float *Kd,
                                             float *Vd, float *out, int seq, int dim, int nq, int window, int block,
                                             int zero, float sscale, void *stream) {
-  if (!kw || !vw || !Q || !Kd || !Vd || !out) return CF_ERR_INVALID_ARGUMENT;
-  if (dim > KV_DMAX || window > KV_WMAX) return CF_ERR_UNSUPPORTED;
+  cf_status valid = cf_validate_kv_args(kw, kb, kl, kmax, vw, vb, vl, vmax, kscale, vscale, Q, out,
+                                        seq, dim, nq, window, block, sscale);
+  if (valid != CF_OK) return valid;
+  if (!Kd || !Vd) return CF_ERR_INVALID_ARGUMENT;
   if (nq == 0) return CF_OK;
   cudaStream_t s = reinterpret_cast<cudaStream_t>(stream);
   const int t = 64;

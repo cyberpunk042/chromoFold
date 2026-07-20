@@ -1,50 +1,52 @@
-# packaging/ — `libchromofold` for native (Rust FFI) integration
+# packaging/ — `libchromofold` for native integration
 
-The outward-facing C-ABI packaging of the ChromoFold native engine, for a native runtime to link — built for
-**sovereign-os SDD-500** (`../sovereign-os/docs/sdd/500-chromofold-compressed-domain-integration.md`), whose
-`sovereign-chromofold-sys` FFI crate binds this `.so` behind a safe wrapper. Everything here is **additive** — it
-does not modify the engine's kernels or the top-level build.
+The outward-facing C-ABI packaging of the ChromoFold native engine, for a native runtime to link — originally
+built for **sovereign-os SDD-500** (`../sovereign-os/docs/sdd/500-chromofold-compressed-domain-integration.md`).
+Everything here is **additive** — it does not modify the engine's algorithms or the top-level benchmark build.
 
 ## What's here
-- **`../include/chromofold/chromofold.h`** + **`chromofold_search.h`** — the stable C ABI. `chromofold.h` is the
-  base (access / rank / embedding-gather); `chromofold_search.h` is the **compressed-domain search** surface:
-  the RRR-backed wavelet self-index (`cf_rrrw_access_async` / `cf_rrrw_rank_async`) and the **FM-index**
-  (`cf_fm_count_async` / `cf_fm_ranges_async` / `cf_fm_locate_async`) — the net-new capability with no analogue
-  in a plain KV/quant stack (SDD-500 Q-500-B: search first).
-- **`chromofold_capability.json`** — the committed **capability descriptor**: ABI version, exported functions +
-  views, `.cfwv`/`.cfrr`/`.cfrw` fixture formats, the honest-degrade contract (`CHROMOFOLD_ROOT` defaulting to
-  `WARP_SHADERS_ROOT`), and the offline guarantee stated as a *contract to test*. This is the source-of-truth a
-  consumer commits so a box with no ChromoFold checkout degrades honestly (exit-3), never fabricates success.
-- **`conformance.c`** — the **FFI-signature seam**: links the `.so` and asserts every entry point is exported,
-  the signatures match, and the NULL-argument error contract holds — **without a GPU or driver** (the argument
-  guards return `CF_ERR_INVALID_ARGUMENT` before any CUDA call).
-- **`seam_check.c` + `fixtures/tiny.cf{wv,rr,rw}`** — the **`.cfold`-header seam**: small committed reference
-  fixtures (1–10 KB, golden-verified) and a pure-CPU reader that validates each one's stable header prefix
-  (4-byte magic + `u32` version) with **no CUDA at all**.
 
-Together these are SDD-500 Q-500-C's "pure seams" (descriptor parse via the JSON, FFI-signature, `.cfold`
-header) — everything a CI job on a box **without** SAIN-01 hardware can run.
+- **`../include/chromofold/chromofold.h`** — the primary stable C ABI:
+  - packed-wavelet `access` / `rank`;
+  - fused decode + embedding gather;
+  - **compressed-KV causal windowed attention** (`cf_kv_attn_fused_async`), which decodes and dequantizes K/V
+    inside the consumer so dense KV tiles never exist;
+  - the bit-identical dense-reference path (`cf_kv_attn_dense_async`) with caller-provided scratch buffers.
+- **`../include/chromofold/chromofold_search.h`** — the compressed-domain search surface: the RRR-backed wavelet
+  self-index (`cf_rrrw_access_async` / `cf_rrrw_rank_async`) and the FM-index (`cf_fm_count_async` /
+  `cf_fm_ranges_async` / `cf_fm_locate_async`).
+- **`chromofold_capability.json`** — the committed capability descriptor: ABI version, exported functions, views,
+  fixture formats, and honest-degrade contract. Consumers can inspect this without loading CUDA code.
+- **`conformance.c`** — the **FFI-signature seam**: links the `.so` and asserts every public entry point is exported,
+  the signatures match, and the NULL-argument error contract holds — **without a GPU or driver**. This includes
+  the compressed-KV APIs; their guards return `CF_ERR_INVALID_ARGUMENT` before any CUDA call.
+- **`seam_check.c` + `fixtures/tiny.cf{wv,rr,rw}`** — the `.cfold`-header seam: small committed reference fixtures
+  and a pure-CPU reader that validates each stable header prefix.
+- **`functional.cu` + `fixtures/tiny.cffm`** — the hardware-gated GPU functional run: FM-index count/ranges/locate
+  through the shared library, verified against golden results.
 
-- **`functional.cu` + `fixtures/tiny.cffm`** — the **GPU functional run** (hardware-gated half of Q-500-C):
-  loads a committed FM-index fixture, builds a `cf_fm_view`, and calls `cf_fm_count` / `cf_fm_ranges` /
-  `cf_fm_locate` **through the shared library**, verifying the results bit-identical to the fixture's golden.
-  This proves the packaged `.so` *does compressed-domain search correctly* across the FFI boundary — not just
-  that its symbols link. Requires an NVIDIA GPU.
+Together these provide both pure CI seams and a GPU functional seam. A future M9 runtime integration should link
+only these public headers and `libchromofold.so`; it must not redeclare private symbols from CUDA translation units.
 
 ## Build
+
 ```sh
 make lib          # -> build/libchromofold.so   (nvcc; ARCH?=sm_75, override for other GPUs)
-make conformance  # link the FFI-signature seam test + run it (no GPU)
-make seams        # conformance + the .cfold-header seam over the committed fixtures (no GPU) — the full seam suite
-make functional   # GPU: FM-index count/locate through the .so, verified vs golden (hardware-gated)
+make conformance  # link the public ABI seam test + run it (no GPU)
+make seams        # conformance + the .cfold-header seam (no GPU)
+make functional   # GPU: FM-index count/locate through the .so, verified vs golden
 ```
 
 ## ABI at a glance (v0)
-- **Device-native**: all view pointers are device pointers; queries run on the caller's `cudaStream_t`
-  (passed as `void*`, `NULL` = default). No host allocation, no implicit sync, no PCIe round trip.
-- **Views** (`cf_wavelet_view`, `cf_rrrw_view`, `cf_fm_view`) are POD / `#[repr(C)]`-safe, passed by value.
-  Verified sizes on x86-64: 48 / 96 / 144 bytes.
-- **Errors**: `CF_OK=0`, `CF_ERR_INVALID_ARGUMENT=1`, `CF_ERR_UNSUPPORTED=2`, `CF_ERR_CUDA=3`.
 
-Non-goals here (per SDD-500): the Rust `-sys`/wrapper crates, the cockpit panel, and the osctl verb live in
-sovereign-os; this side only provides the linkable library, the header, the descriptor, and the seam test.
+- **Device-native:** all view/tensor pointers are device pointers; queries run on the caller's `cudaStream_t`
+  (`void*`, `NULL` = default). No host allocation, implicit synchronization, or PCIe round trip.
+- **Views:** `cf_wavelet_view`, `cf_rrrw_view`, and `cf_fm_view` are POD / `#[repr(C)]`-safe and passed by value.
+- **KV v0 bounds:** `dim <= 128`, `window <= 512`, `0 <= nq <= seq`, positive block size. The public header is the
+  source of truth.
+- **Errors:** `CF_OK=0`, `CF_ERR_INVALID_ARGUMENT=1`, `CF_ERR_UNSUPPORTED=2`, `CF_ERR_CUDA=3`.
+- **Asynchronous contract:** a successful call means the launch was accepted; the caller owns stream ordering and
+  synchronization.
+
+Non-goals here: a safe Rust wrapper, llama.cpp/vLLM adapter, and production scheduler. Those belong after the ABI
+surface is stable and the real-runtime M9 experiment is selected.

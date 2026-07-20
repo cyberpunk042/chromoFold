@@ -1,6 +1,6 @@
 /* conformance.c — pure-seam ABI conformance for libchromofold (sovereign-os SDD-500 / Q-500-C).
  *
- * Validates that the shared library exports the search ABI, the C header signatures match, and the NULL-argument
+ * Validates that the shared library exports the public ABI, the C header signatures match, and the NULL-argument
  * error contract holds — WITHOUT a GPU or driver. Every call here returns before any CUDA call (the argument
  * guards fire first), so this is the "pure seam" a CI job with no SAIN-01 box can run. Exit 0 = PASS.
  */
@@ -29,12 +29,19 @@ int main(void) {
          CHROMOFOLD_ABI_VERSION, sizeof(cf_wavelet_view), sizeof(cf_rrrw_view), sizeof(cf_fm_view));
   ok &= check("cf_access_async", cf_access_async(wv, NULL, NULL, 1, NULL));
   ok &= check("cf_rank_async", cf_rank_async(wv, NULL, NULL, NULL, 1, NULL));
+  ok &= check("cf_embedding_gather_async", cf_embedding_gather_async(wv, NULL, 1, NULL, NULL, 1, NULL));
+  ok &= check("cf_kv_attn_fused_async",
+              cf_kv_attn_fused_async(NULL, NULL, NULL, 0, NULL, NULL, NULL, 0,
+                                     NULL, NULL, NULL, NULL, 0, 0, 0, 0, 0, 0, 0.0f, NULL));
+  ok &= check("cf_kv_attn_dense_async",
+              cf_kv_attn_dense_async(NULL, NULL, NULL, 0, NULL, NULL, NULL, 0,
+                                     NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, 0, 0, 0, 0, 0.0f, NULL));
   ok &= check("cf_rrrw_access_async", cf_rrrw_access_async(rv, NULL, NULL, 1, NULL));
   ok &= check("cf_rrrw_rank_async", cf_rrrw_rank_async(rv, NULL, NULL, NULL, 1, NULL));
   ok &= check("cf_fm_count_async", cf_fm_count_async(fv, NULL, NULL, NULL, NULL, 1, NULL));
   ok &= check("cf_fm_ranges_async", cf_fm_ranges_async(fv, NULL, NULL, NULL, NULL, NULL, 1, NULL));
   ok &= check("cf_fm_locate_async", cf_fm_locate_async(fv, NULL, NULL, 1, NULL));
-  printf("%s\n", ok ? "PASS — search ABI exported and the NULL-argument contract holds (no GPU used)."
+  printf("%s\n", ok ? "PASS — public ABI exported and the NULL-argument contract holds (no GPU used)."
                     : "FAIL — ABI seam mismatch.");
   return ok ? 0 : 1;
 }
