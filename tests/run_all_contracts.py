@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified contract test runner for ChromoFold M9–M15.
+"""Unified contract test runner for ChromoFold M9–M17.
 
 Builds and runs all CPU contract tests, runs CUDA contract tests when nvcc is
 available, validates every evidence schema with jsonschema, performs
@@ -54,11 +54,15 @@ CONTRACTS: List[Tuple[str, str, Path, str, bool]] = [
     ("m9-gpu.mk", "gpu-fixture-test", BUILD / "kv_gpu_fixture_test", "M9 GPU fixture contract", False),
     ("m9-gpu.mk", "gpu-correctness", BUILD / "paged_kv_cuda_correctness", "M9 paged KV CUDA correctness", True),
     ("m10-multisequence.mk", "", BUILD / "m10-multisequence" / "m10_multisequence_contract", "M10 multisequence contract", False),
+    ("m10-multisequence.mk", "multisequence-orphan-contract", BUILD / "m10-multisequence" / "m10_multisequence_contract_orphan", "M10 multisequence orphan contract", False),
+    ("m11-pinned-server.mk", "m11-contract", BUILD / "m11" / "m11_contract", "M11 pinned server contract", True),
     ("m13-adaptive-compression.mk", "", BUILD / "m13" / "m13_contract", "M13 adaptive compression contract", False),
     ("m14-distributed-multigpu.mk", "", BUILD / "m14" / "m14_contract", "M14 distributed runtime contract", False),
     ("m9-gpu-seal-attention.mk", "", BUILD / "m9-gpu-seal-attention" / "m9_device_seal_contract", "M9 device seal contract", True),
     ("m12-production-performance.mk", "", BUILD / "m12-production-performance" / "m12_production_attention_contract", "M12 production attention contract", True),
     ("m16-disaggregated.mk", "m16-contract", BUILD / "m16" / "m16_contract", "M16 disaggregated serving contract", False),
+    ("m17-production-scheduler.mk", "m17-contract", BUILD / "m17" / "m17_contract", "M17 production scheduler contract", False),
+    ("paged-kv-seam.mk", "paged-kv-seam", BUILD / "paged-kv-seam" / "paged_kv_cuda_seam", "Paged KV CUDA seam", True),
 ]
 
 
@@ -111,6 +115,7 @@ def validator_for_schema(schema_path: Path) -> Path | None:
         "evidence.schema.json": "validate_evidence.py",
         "multisequence-evidence.schema.json": "validate_multisequence_evidence.py",
         "m16-evidence.schema.json": "validate_m16_evidence.py",
+        "m17-evidence.schema.json": "validate_m17_evidence.py",
     }
     if name in mapping:
         candidate = parent / mapping[name]
@@ -250,6 +255,14 @@ _POSITIVE_PAYLOADS: Dict[str, dict] = {
         "isolation": {"cross_request_contamination": 0, "dense_fallback_launches": 0, "cuda_errors": 0},
         "shutdown": {"audit_passed": True, "page_refs": 0, "snapshot_refs": 0},
     },
+    "m17-evidence.schema.json": {
+        "tenants": {"count": 2, "quotas_enforced": True, "fairness_demonstrated": True},
+        "scheduling": {"deadline_schedules": 1, "continuous_batches": 1, "preemptions": 1, "checkpoint_resumes": 1, "cancellations": 1},
+        "resilience": {"circuit_opened": True, "circuit_recovered": True, "safe_drains": 1, "rolling_compatibility": True},
+        "autoscaling": {"scale_up_plans": 1, "heterogeneous_routes": 1, "model_placement_decisions": 1},
+        "isolation": {"cross_tenant_reuse_rejections": 1, "cross_tenant_contamination": 0, "dense_fallback_launches": 0},
+        "shutdown": {"active_refs": 0, "usage_idempotent": True},
+    },
 }
 
 
@@ -366,6 +379,14 @@ _FABRICATED_PAYLOADS: Dict[str, dict] = {
         "security": {"worker_authentication": False, "manifest_integrity": False, "replay_rejected": False},
         "isolation": {"cross_request_contamination": 1, "dense_fallback_launches": 1, "cuda_errors": 1},
         "shutdown": {"audit_passed": False, "page_refs": 1, "snapshot_refs": 1},
+    },
+    "m17-evidence.schema.json": {
+        "tenants": {"count": 1, "quotas_enforced": False, "fairness_demonstrated": False},
+        "scheduling": {"deadline_schedules": 0, "continuous_batches": 0, "preemptions": 0, "checkpoint_resumes": 0, "cancellations": 0},
+        "resilience": {"circuit_opened": False, "circuit_recovered": False, "safe_drains": 0, "rolling_compatibility": False},
+        "autoscaling": {"scale_up_plans": 0, "heterogeneous_routes": 0, "model_placement_decisions": 0},
+        "isolation": {"cross_tenant_reuse_rejections": 0, "cross_tenant_contamination": 1, "dense_fallback_launches": 1},
+        "shutdown": {"active_refs": 1, "usage_idempotent": False},
     },
 }
 

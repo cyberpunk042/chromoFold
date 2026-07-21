@@ -197,11 +197,25 @@ package:
 conformance:
 	$(MAKE) -C packaging seams
 
+# M11 pinned server contract (needs nvcc for CUDA resolver linkage)
+m11-contract:
+	$(MAKE) -f m11-pinned-server.mk m11-contract
+
 # M16 disaggregated serving contract
 m16-contract:
 	$(MAKE) -f m16-disaggregated.mk m16-contract
 
 # Benchmark smoke: CPU generation is mandatory; GPU verification runs only with a usable NVIDIA driver.
+# M17 production scheduler contract
+m17-contract:
+	$(MAKE) -f m17-production-scheduler.mk m17-contract
+
+# Paged KV CUDA seam contract
+paged-kv-seam:
+	$(MAKE) -f paged-kv-seam.mk paged-kv-seam
+
+# Benchmark smoke: core benchmarks that don't need the Warp prototype.
+# Skips gracefully if reference files are missing (they need the prototype Python).
 bench-smoke: $(BUILD)/gpu_access $(BUILD)/rank_bench $(BUILD)/rrr_wavelet $(BUILD)/fm_search $(BUILD)/suffix_array $(BUILD)/build_index
 	@echo "=== Access benchmark ==="
 	@test -f $(REFS)/reference.cfwv \

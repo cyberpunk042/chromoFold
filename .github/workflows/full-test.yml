@@ -1,0 +1,65 @@
+name: Full test (self-hosted GPU)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/full-test.yml"
+      - "tests/**"
+      - "Makefile"
+      - "*.mk"
+      - "include/chromofold/**"
+      - "src/**"
+      - "integrations/llama.cpp/**/*.schema.json"
+      - "integrations/llama.cpp/**/validate_*.py"
+      - "packaging/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/full-test.yml"
+      - "tests/**"
+      - "Makefile"
+      - "*.mk"
+      - "include/chromofold/**"
+      - "src/**"
+      - "integrations/llama.cpp/**/*.schema.json"
+      - "integrations/llama.cpp/**/validate_*.py"
+      - "packaging/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full:
+    name: Full make test + packaging + bench-smoke
+    runs-on: [self-hosted, gpu]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: pip install jsonschema
+
+      - name: Run unified contract tests (full, including CUDA)
+        run: make test
+
+      - name: Packaging library build
+        run: make package
+
+      - name: Packaging ABI conformance seams
+        run: make conformance
+
+      - name: Build benchmark binaries
+        run: make all
+
+      - name: Benchmark smoke
+        run: make bench-smoke

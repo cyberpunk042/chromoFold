@@ -39,7 +39,7 @@ typedef struct cf_llama_server_batch_token {
 typedef struct cf_llama_server_batch {
     const cf_llama_server_batch_token * tokens;
     uint32_t token_item_count;
-    const cf_multisequence_attention_item * attention_items;
+    const cf_sequence_attention_item * attention_items;
     uint32_t attention_item_count;
 } cf_llama_server_batch;
 

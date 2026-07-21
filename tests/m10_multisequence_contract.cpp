@@ -4,6 +4,10 @@
 #include <cstdint>
 #include <iostream>
 
+extern "C" int cf_device_tensor_validate(const cf_device_tensor_view * view) {
+    return view && view->data && view->token_count && view->head_count && view->head_dim ? 0 : -1;
+}
+
 static cf_multisequence_config config() {
     cf_multisequence_config c{};
     c.layer_count = 2;
