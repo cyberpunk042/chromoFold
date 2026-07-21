@@ -121,7 +121,10 @@ def environment_fingerprint(model: Path | None) -> dict[str, Any]:
 
 def redact(value: Any) -> Any:
     if isinstance(value, dict):
-        return {k: ("[REDACTED]" if re.search(r"(?i)(prompt|completion|password|secret|token|private_key|api_key)", k) else redact(v)) for k, v in value.items()}
+        # Only a sensitive-keyed *string value* is content to redact. Numeric metrics whose key merely contains
+        # "prompt"/"completion" (e.g. prompt_content_leaks: 0) are counts, not content — leave them intact so the
+        # evidence stays schema-valid (an integer field must not become "[REDACTED]").
+        return {k: ("[REDACTED]" if (isinstance(v, str) and re.search(r"(?i)(prompt|completion|password|secret|token|private_key|api_key)", k)) else redact(v)) for k, v in value.items()}
     if isinstance(value, list):
         return [redact(v) for v in value]
     if isinstance(value, str):
