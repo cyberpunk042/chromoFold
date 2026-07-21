@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import os
+import signal
 import statistics
 import subprocess
 import time
@@ -56,7 +57,7 @@ def run_case(server: Path, model: Path, mode: str, context: int, slots: int, out
             request_elapsed = None
             returncode = 1
         finally:
-            process.send_signal(subprocess.signal.SIGINT)
+            process.send_signal(signal.SIGINT)
             try:
                 process.wait(timeout=30)
             except subprocess.TimeoutExpired:
