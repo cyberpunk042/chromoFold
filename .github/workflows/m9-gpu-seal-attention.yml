@@ -1,0 +1,39 @@
+name: M9 GPU seal and attention
+
+on:
+  pull_request:
+    paths:
+      - 'include/chromofold/device_kv_seal_attention.h'
+      - 'src/cuda/device_kv_seal_attention.cu'
+      - 'tests/m9_device_seal_contract.cpp'
+      - 'm9-gpu-seal-attention.mk'
+      - '.github/workflows/m9-gpu-seal-attention.yml'
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: apt-get update && apt-get install -y --no-install-recommends make g++ ca-certificates
+      - name: Compile transactional seal and attention path
+        run: make -f m9-gpu-seal-attention.mk gpu-seal-compile CUDA_ARCH=80
+      - name: Verify fail-closed and publication anchors
+        run: |
+          grep -q 'CF_SEAL_FAULT_DESCRIPTOR_PUBLISH' include/chromofold/device_kv_seal_attention.h
+          grep -q 'descriptor_publications' src/cuda/device_kv_seal_attention.cu
+          grep -q 'reference_attention' src/cuda/device_kv_seal_attention.cu
+          grep -q 'dense_fallback' docs/m9-gpu-seal-attention.md
+
+  self-hosted-sanitizer:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, x64, gpu, cuda]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run contract
+        run: make -f m9-gpu-seal-attention.mk gpu-seal-contract CUDA_ARCH=${CUDA_ARCH:-89}
+      - name: Run Compute Sanitizer suite
+        run: make -f m9-gpu-seal-attention.mk gpu-seal-sanitize CUDA_ARCH=${CUDA_ARCH:-89}
