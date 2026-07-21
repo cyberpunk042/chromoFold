@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <stdexcept>
 
 namespace chromofold::gpu_fixture {
@@ -109,7 +108,7 @@ EncodedKvPage encode_int4_page(const std::vector<float>& keys,
 
 void validate_page(const EncodedKvPage& page) {
     const std::uint64_t values = static_cast<std::uint64_t>(page.token_count) * page.head_dim;
-    if (page.token_count == 0 || page.head_dim == 0 || page.kv_head > std::numeric_limits<std::uint32_t>::max() ||
+    if (page.token_count == 0 || page.head_dim == 0 ||
         page.k_scales.size() != page.head_dim || page.v_scales.size() != page.token_count ||
         page.k.block_size == 0 || page.v.block_size != page.k.block_size ||
         page.k.max_code_length != 4 || page.v.max_code_length != 4 ||
