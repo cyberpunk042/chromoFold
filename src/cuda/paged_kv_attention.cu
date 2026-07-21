@@ -2,6 +2,7 @@
 #include "chromofold/detail/block_huffman_device.cuh"
 
 #include <cuda_runtime.h>
+#include <cmath>
 #include <math.h>
 
 namespace {
@@ -130,7 +131,7 @@ extern "C" cf_status cf_kv_validate_paged_attention_desc(const cf_kv_paged_atten
         desc->abi_version != CF_KV_CUDA_ABI_VERSION || desc->queries == nullptr || desc->output == nullptr ||
         desc->query_count == 0 || desc->query_head_count == 0 || desc->kv_head_count == 0 ||
         desc->gqa_group_size == 0 || desc->head_dim == 0 || desc->head_dim > CF_KV_MAX_HEAD_DIM ||
-        !isfinite(desc->softmax_scale)) {
+        !std::isfinite(desc->softmax_scale)) {
         return CF_ERR_INVALID_ARGUMENT;
     }
     if (desc->query_head_count != desc->kv_head_count * desc->gqa_group_size ||
