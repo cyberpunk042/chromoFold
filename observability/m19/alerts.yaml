@@ -1,0 +1,31 @@
+groups:
+  - name: chromofold-m19
+    rules:
+      - alert: ChromoFoldDeadlineMissRateHigh
+        expr: rate(chromofold_deadline_misses_total[5m]) / clamp_min(rate(chromofold_requests_total[5m]), 1) > 0.01
+        for: 10m
+        labels: {severity: critical}
+        annotations: {summary: "Deadline miss rate exceeds 1%"}
+      - alert: ChromoFoldTTFTRegression
+        expr: histogram_quantile(0.95, sum by (le, slo_class) (rate(chromofold_ttft_seconds_bucket[10m]))) > 0.75
+        for: 15m
+        labels: {severity: warning}
+        annotations: {summary: "Interactive TTFT p95 exceeds qualification target"}
+      - alert: ChromoFoldReferenceLeak
+        expr: chromofold_active_page_refs + chromofold_active_snapshot_refs + chromofold_active_lease_refs + chromofold_active_request_refs > 0
+        for: 30m
+        labels: {severity: critical}
+        annotations: {summary: "References remain after drain window"}
+      - alert: ChromoFoldCrossTenantContamination
+        expr: increase(chromofold_cross_tenant_contamination_total[5m]) > 0
+        labels: {severity: critical}
+        annotations: {summary: "Cross-tenant contamination detected"}
+      - alert: ChromoFoldCudaErrors
+        expr: increase(chromofold_cuda_errors_total[5m]) > 0
+        labels: {severity: critical}
+        annotations: {summary: "CUDA errors detected"}
+      - alert: ChromoFoldAuditChainFailure
+        expr: chromofold_audit_chain_valid == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "Audit chain verification failed"}

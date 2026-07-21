@@ -1,0 +1,53 @@
+name: M19 production qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_digest:
+        description: Qualified immutable release digest
+        required: true
+        type: string
+      duration_seconds:
+        description: Soak duration
+        required: true
+        default: '86400'
+        type: string
+      evidence_path:
+        description: Produced M19 evidence JSON
+        required: true
+        default: 'build/m19/evidence.json'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: [self-hosted, linux, gpu, chromofold-distributed]
+    timeout-minutes: 1560
+    env:
+      CHROMOFOLD_RELEASE_DIGEST: ${{ inputs.release_digest }}
+      CHROMOFOLD_QUALIFICATION_SECONDS: ${{ inputs.duration_seconds }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Static qualification contracts
+        run: make -f m19-qualification.mk m19-all
+      - name: Verify GPU fleet
+        run: nvidia-smi
+      - name: Run qualification harness
+        run: |
+          test -x integrations/llama.cpp/qualification/run_m19_qualification.py
+          python3 integrations/llama.cpp/qualification/run_m19_qualification.py \
+            --release-digest "$CHROMOFOLD_RELEASE_DIGEST" \
+            --duration "$CHROMOFOLD_QUALIFICATION_SECONDS" \
+            --output '${{ inputs.evidence_path }}'
+      - name: Validate strict evidence
+        run: python3 integrations/llama.cpp/qualification/validate_m19_evidence.py '${{ inputs.evidence_path }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m19-production-qualification
+          path: |
+            ${{ inputs.evidence_path }}
+            build/m19/incident-bundle/
+            build/m19/benchmark-report/
+          if-no-files-found: error

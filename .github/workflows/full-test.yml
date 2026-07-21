@@ -1,29 +1,9 @@
 name: Full test (self-hosted GPU)
 
+# This workflow requires a private runner labelled `self-hosted` and `gpu`.
+# Keep it manual-only so pull requests and pushes never queue indefinitely when
+# that hardware is offline. Routine PR validation is handled by hosted CPU CI.
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/full-test.yml"
-      - "tests/**"
-      - "Makefile"
-      - "*.mk"
-      - "include/chromofold/**"
-      - "src/**"
-      - "integrations/llama.cpp/**/*.schema.json"
-      - "integrations/llama.cpp/**/validate_*.py"
-      - "packaging/**"
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/full-test.yml"
-      - "tests/**"
-      - "Makefile"
-      - "*.mk"
-      - "include/chromofold/**"
-      - "src/**"
-      - "integrations/llama.cpp/**/*.schema.json"
-      - "integrations/llama.cpp/**/validate_*.py"
-      - "packaging/**"
   workflow_dispatch:
 
 permissions:
@@ -37,6 +17,7 @@ jobs:
   full:
     name: Full make test + packaging + bench-smoke
     runs-on: [self-hosted, gpu]
+    timeout-minutes: 360
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
