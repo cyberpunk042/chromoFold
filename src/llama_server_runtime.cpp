@@ -118,7 +118,7 @@ extern "C" int cf_llama_server_cancel_async(cf_llama_server_runtime * runtime, i
 }
 
 extern "C" int cf_llama_server_sequence_copy_async(cf_llama_server_runtime * runtime, int64_t source, int64_t destination,
-                                                      uint32_t token_begin, uint32_t token_end, void * stream) {
+                                                       uint32_t token_begin, uint32_t token_end, void * stream) {
     if (!runtime) return -1;
     std::lock_guard<std::mutex> guard(runtime->mutex);
     if (runtime->shutting_down || !runtime->live_sequences.count(source)) return fail(runtime, "source sequence does not exist");
@@ -132,7 +132,7 @@ extern "C" int cf_llama_server_sequence_copy_async(cf_llama_server_runtime * run
 }
 
 extern "C" int cf_llama_server_sequence_remove_async(cf_llama_server_runtime * runtime, int64_t sequence_id,
-                                                        int64_t position_begin, int64_t position_end, void * stream) {
+                                                         int64_t position_begin, int64_t position_end, void * stream) {
     if (!runtime) return -1;
     if (position_begin < 0 && position_end < 0) return cf_llama_server_slot_reset_async(runtime, sequence_id, stream);
     if (!sequence_is_live(runtime, sequence_id)) return fail(runtime, "sequence does not exist");
@@ -143,7 +143,7 @@ extern "C" int cf_llama_server_sequence_remove_async(cf_llama_server_runtime * r
 }
 
 extern "C" int cf_llama_server_sequence_shift_async(cf_llama_server_runtime * runtime, int64_t sequence_id,
-                                                       uint32_t position_begin, uint32_t position_end, int32_t delta, void * stream) {
+                                                        uint32_t position_begin, uint32_t position_end, int32_t delta, void * stream) {
     if (!runtime || !sequence_is_live(runtime, sequence_id)) return -1;
     if (cf_sequence_shift_async(runtime->host_cache, sequence_id, position_begin, position_end, delta, stream) != 0)
         return fail(runtime, cf_multisequence_last_error(runtime->host_cache));
@@ -156,9 +156,9 @@ extern "C" int cf_llama_server_sequence_shift_async(cf_llama_server_runtime * ru
 }
 
 extern "C" int cf_llama_server_append_layer_async(cf_llama_server_runtime * runtime, int64_t sequence_id,
-                                                     uint32_t layer_index, uint32_t token_begin,
-                                                     const float * key, const float * value,
-                                                     uint32_t token_count, void * stream) {
+                                                      uint32_t layer_index, uint32_t token_begin,
+                                                      const float * key, const float * value,
+                                                      uint32_t token_count, void * stream) {
     if (!runtime || !key || !value || !token_count || !sequence_is_live(runtime, sequence_id)) return -1;
     if (cf_ms_cuda_stage_active_async(runtime->cuda_resolver, sequence_id, layer_index, token_begin,
                                       key, value, token_count, stream) != 0)
@@ -168,8 +168,8 @@ extern "C" int cf_llama_server_append_layer_async(cf_llama_server_runtime * runt
 }
 
 extern "C" int cf_llama_server_execute_batch_async(cf_llama_server_runtime * runtime,
-                                                      const cf_llama_server_batch * batch,
-                                                      void * stream) {
+                                                       const cf_llama_server_batch * batch,
+                                                       void * stream) {
     if (!runtime || !batch || !batch->attention_items || !batch->attention_item_count) return -1;
     std::vector<cf_ms_batch_item> items;
     items.reserve(batch->attention_item_count);
@@ -177,6 +177,8 @@ extern "C" int cf_llama_server_execute_batch_async(cf_llama_server_runtime * run
     {
         std::lock_guard<std::mutex> guard(runtime->mutex);
         if (runtime->shutting_down) return fail(runtime, "server runtime is shutting down");
+        if (runtime->stats.dense_nodes_scheduled != 0)
+            return fail(runtime, "dense attention node scheduled while ChromoFold backend is active");
         for (uint32_t i = 0; i < batch->attention_item_count; ++i) {
             const auto & source = batch->attention_items[i];
             if (!runtime->live_sequences.count(source.sequence_id)) return fail(runtime, "batch references unknown sequence");
