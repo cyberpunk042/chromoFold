@@ -58,6 +58,7 @@ CONTRACTS: List[Tuple[str, str, Path, str, bool]] = [
     ("m14-distributed-multigpu.mk", "", BUILD / "m14" / "m14_contract", "M14 distributed runtime contract", False),
     ("m9-gpu-seal-attention.mk", "", BUILD / "m9-gpu-seal-attention" / "m9_device_seal_contract", "M9 device seal contract", True),
     ("m12-production-performance.mk", "", BUILD / "m12-production-performance" / "m12_production_attention_contract", "M12 production attention contract", True),
+    ("m16-disaggregated.mk", "m16-contract", BUILD / "m16" / "m16_contract", "M16 disaggregated serving contract", False),
 ]
 
 

@@ -12,7 +12,7 @@ BUILD = build
 REFS  = benchmarks/refs
 VOCABS = 4 16 256 32768 65536 131072
 
-.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet rans fm-search fused-matmul kv-attention sparse-gather delta suffix-array build-index test test-quick
+.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet rans fm-search fused-matmul kv-attention sparse-gather delta suffix-array build-index test test-quick package conformance m16-contract bench-smoke
 
 all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet $(BUILD)/rans_bench $(BUILD)/fm_search $(BUILD)/fused_matmul $(BUILD)/fused_kv_attention $(BUILD)/sparse_gather $(BUILD)/delta_bench $(BUILD)/suffix_array
 
@@ -182,7 +182,7 @@ fused: $(BUILD)/fused_embedding
 	@test -f $(REFS)/ref_V32768.cfwv || $(PYTHON) tools/export_reference.py $(REFS)/ref_V32768.cfwv --vocab 32768 >/dev/null
 	$(BUILD)/fused_embedding $(REFS)/ref_V32768.cfwv
 
-# Unified contract test runner: builds and runs all M9–M15 CPU contracts,
+# Unified contract test runner: builds and runs all M9–M16 CPU contracts,
 # validates every evidence schema, and rejects fabricated evidence.
 test:
 	$(PYTHON) tests/run_all_contracts.py
@@ -190,5 +190,43 @@ test:
 test-quick:
 	$(PYTHON) tests/run_all_contracts.py --quick
 
+# Packaging: build shared library and run ABI conformance seams (no GPU needed)
+package:
+	$(MAKE) -C packaging lib
+
+conformance:
+	$(MAKE) -C packaging seams
+
+# M16 disaggregated serving contract
+m16-contract:
+	$(MAKE) -f m16-disaggregated.mk m16-contract
+
+# Benchmark smoke: core benchmarks that don't need the Warp prototype.
+# Skips gracefully if reference files are missing (they need the prototype Python).
+bench-smoke: $(BUILD)/gpu_access $(BUILD)/rank_bench $(BUILD)/rrr_wavelet $(BUILD)/fm_search $(BUILD)/suffix_array $(BUILD)/build_index
+	@echo "=== Access benchmark ==="
+	@test -f $(REFS)/reference.cfwv \
+	  && $(BUILD)/gpu_access $(REFS)/reference.cfwv \
+	  || echo "  [SKIP] access: reference.cfwv missing (needs Warp prototype)"
+	@echo "=== Rank benchmark ==="
+	@test -f $(REFS)/ref_V256.cfwv \
+	  && $(BUILD)/rank_bench $(REFS)/ref_V256.cfwv \
+	  || echo "  [SKIP] rank: ref_V256.cfwv missing (needs Warp prototype)"
+	@echo "=== RRR-wavelet benchmark ==="
+	@test -f $(REFS)/rrw_V64.cfrw \
+	  && $(BUILD)/rrr_wavelet $(REFS)/rrw_V64.cfrw \
+	  || echo "  [SKIP] rrr-wavelet: rrw_V64.cfrw missing (needs Warp prototype)"
+	@echo "=== FM-search benchmark ==="
+	@test -f $(REFS)/fm_V64.cffm \
+	  && $(BUILD)/fm_search $(REFS)/fm_V64.cffm \
+	  || echo "  [SKIP] fm-search: fm_V64.cffm missing (needs Warp prototype)"
+	@echo "=== Suffix-array build ==="
+	$(BUILD)/suffix_array
+	@echo "=== Native C++ build + verify ==="
+	$(BUILD)/build_index $(REFS)/cpp_V64.cfrw --vocab 64 --fm $(REFS)/cpp_V64.cffm
+	$(BUILD)/rrr_wavelet $(REFS)/cpp_V64.cfrw
+	$(BUILD)/fm_search $(REFS)/cpp_V64.cffm
+
 clean:
 	rm -rf $(BUILD) $(REFS)
+	$(MAKE) -C packaging clean

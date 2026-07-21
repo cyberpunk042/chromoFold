@@ -1,0 +1,59 @@
+name: Benchmark smoke
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/benchmark-smoke.yml"
+      - "Makefile"
+      - "benchmarks/**"
+      - "src/cuda/**"
+      - "include/chromofold/**"
+      - "tools/build_index.cpp"
+      - "tools/export_reference.py"
+      - "tools/export_rrr_wavelet.py"
+      - "tools/export_fm_index.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/benchmark-smoke.yml"
+      - "Makefile"
+      - "benchmarks/**"
+      - "src/cuda/**"
+      - "include/chromofold/**"
+      - "tools/build_index.cpp"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: GPU benchmark smoke (BIT-IDENTICAL verification)
+    runs-on: ubuntu-latest
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu22.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install host compiler and make
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends build-essential ca-certificates python3 python3-pip
+
+      - name: Install Python dependencies for reference generation
+        run: |
+          pip3 install --break-system-packages numpy torch 2>/dev/null || pip3 install numpy torch
+          # Try to install warp-compress prototype reference generator if sibling repo present,
+          # otherwise bench-smoke skips the Warp-dependent benchmarks gracefully.
+
+      - name: Build all benchmark binaries
+        run: make all
+
+      - name: Run benchmark smoke
+        run: make bench-smoke
