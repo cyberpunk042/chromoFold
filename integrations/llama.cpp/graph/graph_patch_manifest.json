@@ -1,0 +1,29 @@
+{
+  "llama_commit": "76f46ad29d61fd8c1401e8221842934bf62a6064",
+  "required_upstream_files": [
+    "common/arg.cpp",
+    "common/common.h",
+    "src/llama-context.cpp",
+    "src/llama-context.h",
+    "src/llama-model.cpp",
+    "src/llama-graph.cpp",
+    "src/llama-kv-cache.cpp",
+    "CMakeLists.txt"
+  ],
+  "generated_files": [
+    "common/chromofold-cli.h",
+    "src/chromofold-context-owner.h",
+    "src/chromofold-context-owner.cpp",
+    "src/chromofold-graph-hooks.h",
+    "src/chromofold-graph-hooks.cpp",
+    "cmake/chromofold-graph.cmake"
+  ],
+  "required_symbols": [
+    "--kv-cache-backend",
+    "--chromofold-page-size",
+    "cf_llama_graph_create",
+    "cf_llama_graph_append_device",
+    "cf_llama_graph_record_attention",
+    "cf_llama_graph_record_dense_dispatch"
+  ]
+}
