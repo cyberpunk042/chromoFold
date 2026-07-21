@@ -67,6 +67,7 @@ def main() -> int:
         if dst.exists():
             shutil.rmtree(dst) if dst.is_dir() else dst.unlink()
         shutil.copytree(src, dst) if src.is_dir() else shutil.copy2(src, dst)
+    write(overlay / "PINNED_COMMIT", actual + "\n")
 
     write(checkout / "cmake/chromofold-runtime.cmake", """option(GGML_CHROMOFOLD \"Enable ChromoFold compressed KV backend\" OFF)\nif (GGML_CHROMOFOLD)\n  if (NOT GGML_CUDA)\n    message(FATAL_ERROR \"GGML_CHROMOFOLD requires GGML_CUDA\")\n  endif()\n  set(CHROMOFOLD_ROOT \"${CMAKE_CURRENT_LIST_DIR}/../chromofold-overlay\")\n  add_library(chromofold-runtime STATIC\n    ${CHROMOFOLD_ROOT}/integrations/llama.cpp/chromofold_kv_adapter.cpp\n    ${CHROMOFOLD_ROOT}/integrations/llama.cpp/chromofold_runtime_bridge.cpp\n    ${CHROMOFOLD_ROOT}/src/runtime/kv_gpu_fixture.cpp\n    ${CHROMOFOLD_ROOT}/src/runtime/compressed_kv_cache.cu\n    ${CHROMOFOLD_ROOT}/src/cuda/kv_cuda_owner.cu\n    ${CHROMOFOLD_ROOT}/src/cuda/paged_kv_attention.cu)\n  target_include_directories(chromofold-runtime PUBLIC\n    ${CHROMOFOLD_ROOT}/include\n    ${CHROMOFOLD_ROOT}/integrations/llama.cpp)\n  target_compile_features(chromofold-runtime PUBLIC cxx_std_17)\n  target_link_libraries(chromofold-runtime PUBLIC CUDA::cudart)\nendif()\n""")
     write(checkout / "common/chromofold-options.h", """#pragma once\n#include <cstdint>\n#include <string>\nstruct common_chromofold_params {\n    std::string backend = \"dense\";\n    std::uint32_t page_size = 128;\n    std::uint32_t window = 0;\n    bool stats = false;\n    std::string evidence_path;\n};\n""")
