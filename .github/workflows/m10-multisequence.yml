@@ -1,0 +1,39 @@
+name: M10 multisequence cache
+
+on:
+  pull_request:
+    paths:
+      - 'include/chromofold/multisequence_cache.h'
+      - 'src/multisequence_cache.cpp'
+      - 'integrations/llama.cpp/multisequence/**'
+      - 'tests/m10_multisequence*'
+      - 'm10-multisequence.mk'
+      - 'docs/m10-multisequence-cache.md'
+      - '.github/workflows/m10-multisequence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile multisequence ownership core
+        run: make -f m10-multisequence.mk multisequence-compile
+      - name: Run multisequence contract
+        run: make -f m10-multisequence.mk multisequence-contract
+      - name: Verify integration anchors
+        run: make -f m10-multisequence.mk multisequence-anchor-check
+      - name: Reject fallback semantics
+        run: |
+          if grep -R "fallback.*dense\|dense.*fallback" include/chromofold/multisequence_cache.h integrations/llama.cpp/multisequence | grep -v "strict_no_fallback"; then
+            echo 'Unexpected dense fallback seam in M10 integration' >&2
+            exit 1
+          fi
+      - name: Verify invariant and reclamation counters
+        run: |
+          grep -F 'invariant_failures' include/chromofold/multisequence_cache.h
+          grep -F 'pages_pending_reclamation' include/chromofold/multisequence_cache.h
+          grep -F 'speculative_transactions_rolled_back' include/chromofold/multisequence_cache.h
