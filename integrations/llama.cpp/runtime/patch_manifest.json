@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "llama_commit": "76f46ad29d61fd8c1401e8221842934bf62a6064",
+  "build_option": "GGML_CHROMOFOLD",
+  "backend_values": ["dense", "chromofold"],
+  "cli_options": [
+    "--kv-cache-backend",
+    "--chromofold-page-size",
+    "--chromofold-window",
+    "--chromofold-stats",
+    "--chromofold-evidence"
+  ],
+  "required_upstream_files": [
+    "CMakeLists.txt",
+    "common/arg.cpp",
+    "common/common.h",
+    "src/llama-context.cpp",
+    "src/llama-kv-cache.cpp",
+    "src/llama-kv-cache.h"
+  ],
+  "generated_files": [
+    "cmake/chromofold-runtime.cmake",
+    "common/chromofold-options.h",
+    "src/chromofold-runtime-hook.h",
+    "src/chromofold-runtime-hook.cpp"
+  ],
+  "no_silent_fallback": true,
+  "initial_support": {
+    "backend": "cuda",
+    "sequence_ids": [0],
+    "scalar_types": ["f32"],
+    "head_dim_max": 128,
+    "causal": true,
+    "speculative_decoding": false,
+    "server_batching": false
+  }
+}
