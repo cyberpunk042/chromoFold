@@ -1,0 +1,39 @@
+name: RC1 serving adapter contracts
+
+on:
+  pull_request:
+    paths:
+      - "tools/chromofold_qualification_adapter.py"
+      - "tests/test_chromofold_qualification_adapter.py"
+      - "tests/fixtures/rc1-serving-adapter-*.json"
+      - "integrations/llama.cpp/qualification/rc1-serving-adapter.schema.json"
+      - "integrations/llama.cpp/qualification/validate_rc1_serving_adapter.py"
+      - "rc1-serving-adapter.mk"
+      - ".github/workflows/rc1-serving-adapter.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tools/chromofold_qualification_adapter.py"
+      - "tests/test_chromofold_qualification_adapter.py"
+      - "integrations/llama.cpp/qualification/rc1-serving-adapter.schema.json"
+      - "integrations/llama.cpp/qualification/validate_rc1_serving_adapter.py"
+      - "rc1-serving-adapter.mk"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc1-serving-adapter-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install jsonschema
+      - run: make -f rc1-serving-adapter.mk rc1-serving-all
