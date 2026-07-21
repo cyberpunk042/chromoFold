@@ -1,6 +1,5 @@
 #include "chromofold/llama_server_runtime.h"
 
-#include <algorithm>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -28,13 +27,14 @@ bool valid_config(const cf_llama_server_config & c) {
            c.llama_commit && c.model_sha256;
 }
 
-void set_error(cf_llama_server_runtime * runtime, const char * message) {
+int fail(cf_llama_server_runtime * runtime, const char * message) {
     if (runtime) runtime->error = message ? message : "unknown ChromoFold server error";
+    return -1;
 }
 
-int fail(cf_llama_server_runtime * runtime, const char * message) {
-    set_error(runtime, message);
-    return -1;
+bool sequence_is_live(cf_llama_server_runtime * runtime, int64_t sequence_id) {
+    std::lock_guard<std::mutex> guard(runtime->mutex);
+    return !runtime->shutting_down && runtime->live_sequences.count(sequence_id) != 0;
 }
 
 } // namespace
@@ -44,7 +44,6 @@ extern "C" cf_llama_server_runtime * cf_llama_server_runtime_create(const cf_lla
     try {
         auto runtime = std::make_unique<cf_llama_server_runtime>();
         runtime->config = *config;
-
         cf_multisequence_config host{};
         host.layer_count = config->layer_count;
         host.kv_head_count = config->kv_head_count;
@@ -56,7 +55,6 @@ extern "C" cf_llama_server_runtime * cf_llama_server_runtime_create(const cf_lla
         host.enable_invariant_auditor = 1;
         runtime->host_cache = cf_multisequence_create(&host);
         if (!runtime->host_cache) throw std::runtime_error("failed to create M10 host cache");
-
         cf_ms_cuda_config device{};
         device.layer_count = config->layer_count;
         device.kv_head_count = config->kv_head_count;
@@ -123,7 +121,7 @@ extern "C" int cf_llama_server_sequence_copy_async(cf_llama_server_runtime * run
                                                       uint32_t token_begin, uint32_t token_end, void * stream) {
     if (!runtime) return -1;
     std::lock_guard<std::mutex> guard(runtime->mutex);
-    if (!runtime->live_sequences.count(source)) return fail(runtime, "source sequence does not exist");
+    if (runtime->shutting_down || !runtime->live_sequences.count(source)) return fail(runtime, "source sequence does not exist");
     if (cf_sequence_copy_async(runtime->host_cache, source, destination, token_begin, token_end, stream) != 0)
         return fail(runtime, cf_multisequence_last_error(runtime->host_cache));
     if (cf_ms_cuda_copy_sequence_async(runtime->cuda_resolver, source, destination, stream) != 0)
@@ -136,20 +134,22 @@ extern "C" int cf_llama_server_sequence_copy_async(cf_llama_server_runtime * run
 extern "C" int cf_llama_server_sequence_remove_async(cf_llama_server_runtime * runtime, int64_t sequence_id,
                                                         int64_t position_begin, int64_t position_end, void * stream) {
     if (!runtime) return -1;
+    if (position_begin < 0 && position_end < 0) return cf_llama_server_slot_reset_async(runtime, sequence_id, stream);
+    if (!sequence_is_live(runtime, sequence_id)) return fail(runtime, "sequence does not exist");
     if (cf_sequence_remove_async(runtime->host_cache, sequence_id, position_begin, position_end, stream) != 0)
         return fail(runtime, cf_multisequence_last_error(runtime->host_cache));
-    if (position_begin < 0 && position_end < 0) return cf_llama_server_slot_reset_async(runtime, sequence_id, stream);
     runtime->error.clear();
     return 0;
 }
 
 extern "C" int cf_llama_server_sequence_shift_async(cf_llama_server_runtime * runtime, int64_t sequence_id,
                                                        uint32_t position_begin, uint32_t position_end, int32_t delta, void * stream) {
-    if (!runtime) return -1;
+    if (!runtime || !sequence_is_live(runtime, sequence_id)) return -1;
     if (cf_sequence_shift_async(runtime->host_cache, sequence_id, position_begin, position_end, delta, stream) != 0)
         return fail(runtime, cf_multisequence_last_error(runtime->host_cache));
     if (cf_ms_cuda_shift_sequence(runtime->cuda_resolver, sequence_id, position_begin, position_end, delta) != 0)
         return fail(runtime, cf_ms_cuda_last_error(runtime->cuda_resolver));
+    std::lock_guard<std::mutex> guard(runtime->mutex);
     runtime->stats.context_shifts++;
     runtime->error.clear();
     return 0;
@@ -159,8 +159,7 @@ extern "C" int cf_llama_server_append_layer_async(cf_llama_server_runtime * runt
                                                      uint32_t layer_index, uint32_t token_begin,
                                                      const float * key, const float * value,
                                                      uint32_t token_count, void * stream) {
-    if (!runtime || !key || !value || !token_count) return -1;
-    if (!runtime->live_sequences.count(sequence_id)) return fail(runtime, "sequence does not exist");
+    if (!runtime || !key || !value || !token_count || !sequence_is_live(runtime, sequence_id)) return -1;
     if (cf_ms_cuda_stage_active_async(runtime->cuda_resolver, sequence_id, layer_index, token_begin,
                                       key, value, token_count, stream) != 0)
         return fail(runtime, cf_ms_cuda_last_error(runtime->cuda_resolver));
@@ -175,25 +174,29 @@ extern "C" int cf_llama_server_execute_batch_async(cf_llama_server_runtime * run
     std::vector<cf_ms_batch_item> items;
     items.reserve(batch->attention_item_count);
     std::unordered_set<int64_t> sequence_ids;
-    for (uint32_t i = 0; i < batch->attention_item_count; ++i) {
-        const auto & source = batch->attention_items[i];
-        if (!runtime->live_sequences.count(source.sequence_id)) return fail(runtime, "batch references unknown sequence");
-        sequence_ids.insert(source.sequence_id);
-        cf_ms_batch_item item{};
-        item.sequence_id = source.sequence_id;
-        item.layer = source.layer;
-        item.query = source.query;
-        item.output = source.output;
-        item.output_type = source.output_type;
-        item.output_token_stride_bytes = source.output_token_stride_bytes;
-        item.output_head_stride_bytes = source.output_head_stride_bytes;
-        item.output_element_stride_bytes = source.output_element_stride_bytes;
-        item.query_token_begin = source.query_token_begin;
-        item.softmax_scale = source.softmax_scale;
-        item.causal_window = source.causal_window;
-        items.push_back(item);
+    {
+        std::lock_guard<std::mutex> guard(runtime->mutex);
+        if (runtime->shutting_down) return fail(runtime, "server runtime is shutting down");
+        for (uint32_t i = 0; i < batch->attention_item_count; ++i) {
+            const auto & source = batch->attention_items[i];
+            if (!runtime->live_sequences.count(source.sequence_id)) return fail(runtime, "batch references unknown sequence");
+            sequence_ids.insert(source.sequence_id);
+            cf_ms_batch_item item{};
+            item.sequence_id = source.sequence_id;
+            item.layer = source.layer;
+            item.query = source.query;
+            item.output = source.output;
+            item.output_type = source.output_type;
+            item.output_token_stride_bytes = source.output_token_stride_bytes;
+            item.output_head_stride_bytes = source.output_head_stride_bytes;
+            item.output_element_stride_bytes = source.output_element_stride_bytes;
+            item.query_token_begin = source.query_token_begin;
+            item.softmax_scale = source.softmax_scale;
+            item.causal_window = source.causal_window;
+            items.push_back(item);
+        }
+        if (sequence_ids.size() > 1) runtime->stats.interleaved_batches++;
     }
-    if (sequence_ids.size() > 1) runtime->stats.interleaved_batches++;
     if (cf_ms_cuda_execute_batch_async(runtime->cuda_resolver, items.data(), static_cast<uint32_t>(items.size()), stream) != 0)
         return fail(runtime, cf_ms_cuda_last_error(runtime->cuda_resolver));
     runtime->error.clear();
@@ -202,18 +205,19 @@ extern "C" int cf_llama_server_execute_batch_async(cf_llama_server_runtime * run
 
 extern "C" int cf_llama_server_shutdown_async(cf_llama_server_runtime * runtime, void * stream) {
     if (!runtime) return -1;
+    std::vector<int64_t> sequences;
     {
         std::lock_guard<std::mutex> guard(runtime->mutex);
         if (runtime->shutting_down) return runtime->stats.shutdown_failures ? -1 : 0;
         runtime->shutting_down = true;
+        sequences.assign(runtime->live_sequences.begin(), runtime->live_sequences.end());
+        runtime->live_sequences.clear();
     }
-    std::vector<int64_t> sequences(runtime->live_sequences.begin(), runtime->live_sequences.end());
     for (int64_t sequence_id : sequences) {
         cf_ms_cuda_cancel_sequence_async(runtime->cuda_resolver, sequence_id, stream);
         cf_ms_cuda_sequence_remove_async(runtime->cuda_resolver, sequence_id, stream);
         cf_sequence_remove_async(runtime->host_cache, sequence_id, -1, -1, stream);
     }
-    runtime->live_sequences.clear();
     cf_ms_cuda_reclaim_async(runtime->cuda_resolver, stream);
     cf_multisequence_reclaim_async(runtime->host_cache, stream);
     runtime->stats.shutdown_audits++;
@@ -228,6 +232,7 @@ extern "C" int cf_llama_server_shutdown_async(cf_llama_server_runtime * runtime,
 
 extern "C" int cf_llama_server_get_stats(const cf_llama_server_runtime * runtime, cf_llama_server_stats * out) {
     if (!runtime || !out) return -1;
+    std::lock_guard<std::mutex> guard(runtime->mutex);
     *out = runtime->stats;
     return 0;
 }
