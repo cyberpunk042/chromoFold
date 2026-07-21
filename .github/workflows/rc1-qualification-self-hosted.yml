@@ -1,0 +1,43 @@
+name: RC1 hardware qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Qualification duration
+        required: true
+        type: choice
+        options: [smoke, candidate, stable]
+        default: smoke
+      evidence_path:
+        description: Runtime-produced evidence JSON
+        required: true
+        default: qualification/rc1-evidence.json
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: [self-hosted, gpu]
+    timeout-minutes: 1500
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify GPU runner
+        run: nvidia-smi -L
+      - name: Run deterministic contracts
+        run: make -f rc1-qualification.mk rc1-all
+      - name: Run patched runtime qualification harness
+        env:
+          CHROMOFOLD_QUALIFICATION_MODE: ${{ inputs.mode }}
+          CHROMOFOLD_EVIDENCE_PATH: ${{ inputs.evidence_path }}
+        run: |
+          test -n "${CHROMOFOLD_RUNTIME_HARNESS:-}" || { echo "CHROMOFOLD_RUNTIME_HARNESS is required"; exit 2; }
+          "$CHROMOFOLD_RUNTIME_HARNESS" --mode "$CHROMOFOLD_QUALIFICATION_MODE" --evidence "$CHROMOFOLD_EVIDENCE_PATH"
+      - name: Evaluate exact runtime evidence
+        run: python3 tools/chromofold_qualify.py evaluate "${{ inputs.evidence_path }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chromofold-rc1-${{ inputs.mode }}-evidence
+          path: ${{ inputs.evidence_path }}
+          if-no-files-found: error
