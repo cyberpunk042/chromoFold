@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["tenants", "scheduling", "resilience", "autoscaling", "isolation", "shutdown"],
+  "properties": {
+    "tenants": {"type":"object","required":["count","quotas_enforced","fairness_demonstrated"],"properties":{"count":{"type":"integer","minimum":2},"quotas_enforced":{"const":true},"fairness_demonstrated":{"const":true}}},
+    "scheduling": {"type":"object","required":["deadline_schedules","continuous_batches","preemptions","checkpoint_resumes","cancellations"],"properties":{"deadline_schedules":{"type":"integer","minimum":1},"continuous_batches":{"type":"integer","minimum":1},"preemptions":{"type":"integer","minimum":1},"checkpoint_resumes":{"type":"integer","minimum":1},"cancellations":{"type":"integer","minimum":1}}},
+    "resilience": {"type":"object","required":["circuit_opened","circuit_recovered","safe_drains","rolling_compatibility"],"properties":{"circuit_opened":{"const":true},"circuit_recovered":{"const":true},"safe_drains":{"type":"integer","minimum":1},"rolling_compatibility":{"const":true}}},
+    "autoscaling": {"type":"object","required":["scale_up_plans","heterogeneous_routes","model_placement_decisions"],"properties":{"scale_up_plans":{"type":"integer","minimum":1},"heterogeneous_routes":{"type":"integer","minimum":1},"model_placement_decisions":{"type":"integer","minimum":1}}},
+    "isolation": {"type":"object","required":["cross_tenant_reuse_rejections","cross_tenant_contamination","dense_fallback_launches"],"properties":{"cross_tenant_reuse_rejections":{"type":"integer","minimum":1},"cross_tenant_contamination":{"const":0},"dense_fallback_launches":{"const":0}}},
+    "shutdown": {"type":"object","required":["active_refs","usage_idempotent"],"properties":{"active_refs":{"const":0},"usage_idempotent":{"const":true}}}
+  }
+}
