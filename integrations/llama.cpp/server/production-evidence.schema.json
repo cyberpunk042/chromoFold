@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["upstream", "model", "server", "scheduler", "kv", "attention", "lifecycle", "memory", "sanitizer", "shutdown"],
+  "properties": {
+    "upstream": {
+      "type": "object",
+      "required": ["llama_commit", "chromofold_commit", "patch_idempotent"],
+      "properties": {
+        "llama_commit": {"const": "76f46ad29d61fd8c1401e8221842934bf62a6064"},
+        "chromofold_commit": {"type": "string", "minLength": 7},
+        "patch_idempotent": {"const": true}
+      }
+    },
+    "model": {
+      "type": "object",
+      "required": ["gguf_sha256", "cuda_device", "outputs_finite"],
+      "properties": {
+        "gguf_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "cuda_device": {"type": "string", "minLength": 1},
+        "outputs_finite": {"const": true}
+      }
+    },
+    "server": {
+      "type": "object",
+      "required": ["real_http_requests", "active_sequences_peak", "cancelled_requests", "slot_reuses"],
+      "properties": {
+        "real_http_requests": {"type": "integer", "minimum": 1},
+        "active_sequences_peak": {"type": "integer", "minimum": 2},
+        "cancelled_requests": {"type": "integer", "minimum": 1},
+        "slot_reuses": {"type": "integer", "minimum": 1}
+      }
+    },
+    "scheduler": {
+      "type": "object",
+      "required": ["interleaved_batches", "sequences_per_batch_peak"],
+      "properties": {
+        "interleaved_batches": {"type": "integer", "minimum": 1},
+        "sequences_per_batch_peak": {"type": "integer", "minimum": 2}
+      }
+    },
+    "kv": {
+      "type": "object",
+      "required": ["device_append_calls", "seal_successes", "pages_registered", "shared_page_references"],
+      "properties": {
+        "device_append_calls": {"type": "integer", "minimum": 1},
+        "seal_successes": {"type": "integer", "minimum": 1},
+        "pages_registered": {"type": "integer", "minimum": 1},
+        "shared_page_references": {"type": "integer", "minimum": 1}
+      }
+    },
+    "attention": {
+      "type": "object",
+      "required": ["compressed_batches_executed", "sequence_attention_launches", "sealed_values_consumed", "active_values_consumed", "dense_fallback_launches", "cuda_errors"],
+      "properties": {
+        "compressed_batches_executed": {"type": "integer", "minimum": 1},
+        "sequence_attention_launches": {"type": "integer", "minimum": 2},
+        "sealed_values_consumed": {"type": "integer", "minimum": 1},
+        "active_values_consumed": {"type": "integer", "minimum": 1},
+        "dense_fallback_launches": {"const": 0},
+        "cuda_errors": {"const": 0}
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "required": ["snapshots_acquired", "snapshots_released", "pages_reclaimed", "cross_sequence_contamination"],
+      "properties": {
+        "snapshots_acquired": {"type": "integer", "minimum": 1},
+        "snapshots_released": {"type": "integer", "minimum": 1},
+        "pages_reclaimed": {"type": "integer", "minimum": 1},
+        "cross_sequence_contamination": {"const": 0}
+      }
+    },
+    "memory": {"type": "object", "required": ["peak_vram_bytes"], "properties": {"peak_vram_bytes": {"type": "integer", "minimum": 1}}},
+    "sanitizer": {"type": "object", "required": ["memcheck", "racecheck", "initcheck", "synccheck"], "properties": {"memcheck": {"const": true}, "racecheck": {"const": true}, "initcheck": {"const": true}, "synccheck": {"const": true}}},
+    "shutdown": {
+      "type": "object",
+      "required": ["page_refs", "snapshot_refs", "audit_passed"],
+      "properties": {"page_refs": {"const": 0}, "snapshot_refs": {"const": 0}, "audit_passed": {"const": true}}
+    }
+  }
+}
