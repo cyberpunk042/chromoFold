@@ -1,0 +1,48 @@
+name: M9 llama graph wiring
+
+on:
+  pull_request:
+    paths:
+      - "integrations/llama.cpp/graph/**"
+      - "tests/llama_graph_contract_test.cpp"
+      - "m9-llama-graph.mk"
+      - ".github/workflows/m9-llama-graph.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  graph-wiring:
+    runs-on: ubuntu-latest
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends build-essential ca-certificates cmake git python3
+      - name: Fetch pinned llama.cpp
+        run: make -f m9-llama-e2e.mk llama-fetch
+      - name: Check graph applicability
+        run: make -f m9-llama-graph.mk llama-graph-check
+      - name: Apply graph wiring twice
+        run: |
+          make -f m9-llama-graph.mk llama-graph-apply
+          make -f m9-llama-graph.mk llama-graph-apply
+      - name: Verify graph wiring
+        run: make -f m9-llama-graph.mk llama-graph-verify
+      - name: Compile graph contract seam
+        run: make -f m9-llama-graph.mk llama-graph-contract-test
+      - name: Reject fake dense fallback
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          graph = Path('integrations/llama.cpp/graph/chromofold_graph_contract.cpp').read_text()
+          assert 'dense graph dispatch is forbidden for ChromoFold' in graph
+          assert 'cf_llama_runtime_record_dense_fallback' in graph
+          print('no-fallback graph policy present')
+          PY
