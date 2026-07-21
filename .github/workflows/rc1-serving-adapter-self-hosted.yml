@@ -1,0 +1,56 @@
+name: RC1 serving adapter hardware qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Qualification duration
+        required: true
+        type: choice
+        options: [smoke, candidate, stable]
+      runtime_url:
+        description: Existing adapter URL
+        required: false
+        default: "http://127.0.0.1:8089"
+      model_path:
+        description: Model path on the runner
+        required: true
+      release_digest:
+        description: Immutable qualified artifact digest
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc1-serving-adapter-hardware
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: [self-hosted, gpu]
+    timeout-minutes: 1500
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install jsonschema nvidia-ml-py
+      - name: Verify adapter contracts
+        run: make -f rc1-serving-adapter.mk rc1-serving-all
+      - name: Run repository-owned runtime harness
+        run: |
+          python3 tools/chromofold_runtime_harness.py \
+            --mode "${{ inputs.mode }}" \
+            --runtime-endpoint "${{ inputs.runtime_url }}" \
+            --metrics-endpoint "${{ inputs.runtime_url }}/metrics" \
+            --model "${{ inputs.model_path }}" \
+            --release-digest "${{ inputs.release_digest }}" \
+            --artifact qualification/rc1-runtime-evidence.json \
+            --incident-bundle qualification/rc1-incident.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rc1-serving-adapter-${{ inputs.mode }}
+          path: qualification/
+          if-no-files-found: error

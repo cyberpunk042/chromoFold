@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chromofold.dev/schemas/rc1-serving-adapter.schema.json",
+  "title": "ChromoFold RC1 serving adapter snapshot",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "qualification_mode", "release_digest", "active_requests", "page_references",
+    "snapshot_references", "leases", "transfer_buffers", "model_bytes", "kv_bytes",
+    "compressed_page_bytes", "allocator_reserved_bytes", "observed_vram_bytes",
+    "cuda_errors", "correctness_failures", "cross_tenant_violations",
+    "dense_fallback_launches", "audit_chain_verified", "mtls_verified",
+    "telemetry_correlated", "workers"
+  ],
+  "properties": {
+    "qualification_mode": {"type": "boolean"},
+    "release_digest": {"type": "string", "minLength": 1},
+    "active_requests": {"type": "integer", "minimum": 0},
+    "page_references": {"type": "integer", "minimum": 0},
+    "snapshot_references": {"type": "integer", "minimum": 0},
+    "leases": {"type": "integer", "minimum": 0},
+    "transfer_buffers": {"type": "integer", "minimum": 0},
+    "model_bytes": {"type": "integer", "minimum": 0},
+    "kv_bytes": {"type": "integer", "minimum": 0},
+    "compressed_page_bytes": {"type": "integer", "minimum": 0},
+    "allocator_reserved_bytes": {"type": "integer", "minimum": 0},
+    "observed_vram_bytes": {"type": "integer", "minimum": 0},
+    "cuda_errors": {"type": "integer", "minimum": 0},
+    "correctness_failures": {"type": "integer", "minimum": 0},
+    "cross_tenant_violations": {"type": "integer", "minimum": 0},
+    "dense_fallback_launches": {"type": "integer", "minimum": 0},
+    "audit_chain_verified": {"type": "boolean"},
+    "mtls_verified": {"type": "boolean"},
+    "telemetry_correlated": {"type": "boolean"},
+    "workers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "role", "healthy"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "role": {"enum": ["router", "scheduler", "prefill", "decode"]},
+          "healthy": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}
