@@ -1,0 +1,90 @@
+name: M12 production performance self-hosted
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_path:
+        description: Runner-local GGUF path
+        required: true
+      cuda_arch:
+        description: CUDA architecture, for example 80 or 89
+        required: true
+        default: '80'
+      contexts:
+        description: Comma-separated context sizes
+        required: true
+        default: '4096,8192,16384,32768'
+      slots:
+        description: Comma-separated slot counts
+        required: true
+        default: '1,2,4,8'
+
+permissions:
+  contents: read
+
+jobs:
+  hardware-proof:
+    runs-on: [self-hosted, linux, x64, nvidia]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record environment
+        run: |
+          mkdir -p build/m12-production-performance/evidence
+          nvidia-smi -q > build/m12-production-performance/evidence/nvidia-smi.txt
+          nvcc --version > build/m12-production-performance/evidence/nvcc.txt
+          git rev-parse HEAD > build/m12-production-performance/evidence/chromofold-commit.txt
+          sha256sum '${{ inputs.model_path }}' > build/m12-production-performance/evidence/model.sha256
+      - name: Compile optimized and reference contracts
+        run: make -f m12-production-performance.mk m12-compile CUDA_ARCH='${{ inputs.cuda_arch }}'
+      - name: Apply pinned llama-server integration
+        run: |
+          make -f m11-pinned-llama-server.mk m11-fetch
+          make -f m11-pinned-llama-server.mk m11-apply
+      - name: Build patched llama-server
+        run: |
+          cmake -S build/llama.cpp-m11 -B build/llama.cpp-m11/build \
+            -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES='${{ inputs.cuda_arch }}' \
+            -DLLAMA_BUILD_SERVER=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/llama.cpp-m11/build --target llama-server -j "$(nproc)"
+      - name: Compute Sanitizer memcheck
+        run: compute-sanitizer --tool memcheck build/m12-production-performance/m12_production_attention_contract |& tee build/m12-production-performance/evidence/memcheck.log
+      - name: Compute Sanitizer racecheck
+        run: compute-sanitizer --tool racecheck build/m12-production-performance/m12_production_attention_contract |& tee build/m12-production-performance/evidence/racecheck.log
+      - name: Compute Sanitizer initcheck
+        run: compute-sanitizer --tool initcheck build/m12-production-performance/m12_production_attention_contract |& tee build/m12-production-performance/evidence/initcheck.log
+      - name: Compute Sanitizer synccheck
+        run: compute-sanitizer --tool synccheck build/m12-production-performance/m12_production_attention_contract |& tee build/m12-production-performance/evidence/synccheck.log
+      - name: Run dense reference optimized matrix
+        run: |
+          python3 integrations/llama.cpp/performance/run_benchmark_matrix.py \
+            --server build/llama.cpp-m11/build/bin/llama-server \
+            --model '${{ inputs.model_path }}' \
+            --contexts '${{ inputs.contexts }}' \
+            --slots '${{ inputs.slots }}' \
+            --output build/m12-production-performance/benchmarks
+      - name: Start optimized server
+        run: |
+          build/llama.cpp-m11/build/bin/llama-server \
+            -m '${{ inputs.model_path }}' --kv-cache-backend chromofold \
+            --chromofold-kernel optimized --parallel 8 --port 8080 \
+            --chromofold-evidence build/m12-production-performance/evidence/performance-evidence.json \
+            > build/m12-production-performance/evidence/server.log 2>&1 &
+          echo $! > build/m12-production-performance/server.pid
+          for i in $(seq 1 120); do curl -fsS http://127.0.0.1:8080/health && exit 0; sleep 1; done
+          exit 1
+      - name: Run 1000-request soak
+        run: python3 integrations/llama.cpp/performance/run_soak.py --requests 1000 --output build/m12-production-performance/evidence/soak.json
+      - name: Graceful shutdown
+        if: always()
+        run: |
+          test -f build/m12-production-performance/server.pid && kill -INT "$(cat build/m12-production-performance/server.pid)" || true
+          sleep 5
+      - name: Validate performance evidence
+        run: python3 integrations/llama.cpp/performance/validate_performance_evidence.py build/m12-production-performance/evidence/performance-evidence.json
+      - name: Upload proof bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m12-production-performance-proof
+          path: build/m12-production-performance

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChromoFold M12 production performance evidence",
+  "type": "object",
+  "required": ["environment", "upstream", "model", "kernels", "graphs", "memory_pool", "benchmarks", "numerics", "isolation", "sanitizer", "soak", "shutdown"],
+  "properties": {
+    "environment": {"type": "object", "required": ["gpu", "cuda", "driver", "chromofold_commit"]},
+    "upstream": {"type": "object", "required": ["llama_commit", "patched_server_executed"], "properties": {"patched_server_executed": {"const": true}}},
+    "model": {"type": "object", "required": ["gguf_sha256", "architecture", "head_dim", "gqa_ratio"]},
+    "kernels": {
+      "type": "object",
+      "required": ["reference_launches", "optimized_launches", "grouped_batches", "dense_fallback_launches", "cuda_errors"],
+      "properties": {
+        "reference_launches": {"type": "integer", "minimum": 1},
+        "optimized_launches": {"type": "integer", "minimum": 1},
+        "grouped_batches": {"type": "integer", "minimum": 1},
+        "dense_fallback_launches": {"const": 0},
+        "cuda_errors": {"const": 0}
+      }
+    },
+    "graphs": {"type": "object", "required": ["captures", "replays", "invalidations"], "properties": {"captures": {"type": "integer", "minimum": 1}, "replays": {"type": "integer", "minimum": 1}}},
+    "memory_pool": {"type": "object", "required": ["peak_reserved_bytes", "peak_live_bytes", "allocation_count"]},
+    "benchmarks": {"type": "object", "required": ["dense", "reference", "optimized", "contexts", "concurrency"]},
+    "numerics": {
+      "type": "object",
+      "required": ["optimized_reference_passed", "max_abs_error", "mean_abs_error", "cosine_similarity", "top1_agreement"],
+      "properties": {"optimized_reference_passed": {"const": true}, "cosine_similarity": {"type": "number", "minimum": 0.99}}
+    },
+    "isolation": {"type": "object", "required": ["concurrent_http_passed", "cross_sequence_contamination"], "properties": {"concurrent_http_passed": {"const": true}, "cross_sequence_contamination": {"const": 0}}},
+    "sanitizer": {"type": "object", "required": ["memcheck", "racecheck", "initcheck", "synccheck"], "properties": {"memcheck": {"const": true}, "racecheck": {"const": true}, "initcheck": {"const": true}, "synccheck": {"const": true}}},
+    "soak": {"type": "object", "required": ["passed", "requests", "memory_stable"], "properties": {"passed": {"const": true}, "requests": {"type": "integer", "minimum": 1000}, "memory_stable": {"const": true}}},
+    "shutdown": {"type": "object", "required": ["audit_passed", "page_refs", "snapshot_refs"], "properties": {"audit_passed": {"const": true}, "page_refs": {"const": 0}, "snapshot_refs": {"const": 0}}}
+  }
+}
