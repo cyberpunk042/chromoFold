@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChromoFold M10 multi-sequence evidence",
+  "type": "object",
+  "required": ["environment", "workload", "sequences", "sharing", "reclamation", "batching", "speculation", "invariants", "runtime"],
+  "properties": {
+    "environment": {
+      "type": "object",
+      "required": ["gpu", "cuda", "llama_cpp_commit", "chromofold_commit"],
+      "properties": {
+        "gpu": {"type": "string", "minLength": 1},
+        "cuda": {"type": "string", "minLength": 1},
+        "llama_cpp_commit": {"type": "string", "minLength": 7},
+        "chromofold_commit": {"type": "string", "minLength": 7}
+      }
+    },
+    "workload": {
+      "type": "object",
+      "required": ["requests", "cancelled_requests", "slot_reuses"],
+      "properties": {
+        "requests": {"type": "integer", "minimum": 3},
+        "cancelled_requests": {"type": "integer", "minimum": 1},
+        "slot_reuses": {"type": "integer", "minimum": 1}
+      }
+    },
+    "sequences": {
+      "type": "object",
+      "required": ["created", "copied", "removed", "shifted", "active_peak"],
+      "properties": {
+        "created": {"type": "integer", "minimum": 2},
+        "copied": {"type": "integer", "minimum": 1},
+        "removed": {"type": "integer", "minimum": 1},
+        "shifted": {"type": "integer", "minimum": 0},
+        "active_peak": {"type": "integer", "minimum": 2}
+      }
+    },
+    "sharing": {
+      "type": "object",
+      "required": ["shared_pages", "shared_page_references", "bytes_saved"],
+      "properties": {
+        "shared_pages": {"type": "integer", "minimum": 1},
+        "shared_page_references": {"type": "integer", "minimum": 2},
+        "bytes_saved": {"type": "integer", "minimum": 1}
+      }
+    },
+    "reclamation": {
+      "type": "object",
+      "required": ["pages_reclaimed", "pending_pages_at_shutdown", "pending_bytes_at_shutdown"],
+      "properties": {
+        "pages_reclaimed": {"type": "integer", "minimum": 1},
+        "pending_pages_at_shutdown": {"const": 0},
+        "pending_bytes_at_shutdown": {"const": 0}
+      }
+    },
+    "batching": {
+      "type": "object",
+      "required": ["batches", "sequences_per_batch_peak", "cross_sequence_contamination"],
+      "properties": {
+        "batches": {"type": "integer", "minimum": 1},
+        "sequences_per_batch_peak": {"type": "integer", "minimum": 2},
+        "cross_sequence_contamination": {"const": false}
+      }
+    },
+    "speculation": {
+      "type": "object",
+      "required": ["started", "committed", "rolled_back"],
+      "properties": {
+        "started": {"type": "integer", "minimum": 1},
+        "committed": {"type": "integer", "minimum": 0},
+        "rolled_back": {"type": "integer", "minimum": 1}
+      }
+    },
+    "invariants": {
+      "type": "object",
+      "required": ["audits", "failures", "reference_count_balance"],
+      "properties": {
+        "audits": {"type": "integer", "minimum": 1},
+        "failures": {"const": 0},
+        "reference_count_balance": {"const": true}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["dense_fallback_launches", "cuda_errors", "outputs_finite", "sanitizer_passed"],
+      "properties": {
+        "dense_fallback_launches": {"const": 0},
+        "cuda_errors": {"const": 0},
+        "outputs_finite": {"const": true},
+        "sanitizer_passed": {"const": true}
+      }
+    }
+  },
+  "additionalProperties": true
+}
