@@ -1,0 +1,54 @@
+name: M17 production scheduler proof
+on:
+  workflow_dispatch:
+    inputs:
+      model_path:
+        description: Runner-local GGUF path
+        required: true
+      duration_minutes:
+        description: Multi-tenant soak duration
+        required: false
+        default: '60'
+
+jobs:
+  production-proof:
+    runs-on: [self-hosted, linux, x64, nvidia]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate runner
+        run: |
+          nvidia-smi
+          test -f '${{ inputs.model_path }}'
+      - name: Build scheduler contract
+        run: make -f m17-production-scheduler.mk m17-contract
+      - name: Build patched servers
+        run: |
+          echo 'Build pinned router, prefill, and decode workers with M16/M17 integration here.'
+      - name: Start heterogeneous worker pool
+        run: |
+          echo 'Start at least one prefill worker and two decode workers with distinct capacity descriptors.'
+      - name: Multi-tenant overload workload
+        run: |
+          echo 'Exercise interactive and batch tenants, quotas, fairness, deadlines, cancellation, and continuous batching.'
+      - name: Preemption and checkpoint resume
+        run: |
+          echo 'Preempt a sequence at a safe boundary, validate checkpoint integrity, and resume it.'
+      - name: Circuit breaker and recovery
+        run: |
+          echo 'Inject repeated worker failures, open the circuit, probe half-open, and recover.'
+      - name: Drain and rolling compatibility
+        run: |
+          echo 'Drain one worker, transfer compatible state, validate version compatibility, and remove it.'
+      - name: Autoscaling decision
+        run: |
+          echo 'Record desired prefill/decode/model replica capacity under overload.'
+      - name: Validate strict evidence
+        run: python3 integrations/llama.cpp/scheduler/validate_m17_evidence.py m17-evidence.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m17-production-scheduler-evidence
+          path: |
+            m17-evidence.json
+            logs/
