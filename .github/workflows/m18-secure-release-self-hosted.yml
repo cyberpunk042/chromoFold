@@ -1,0 +1,62 @@
+name: M18 release security proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Release version to qualify
+        required: true
+        type: string
+      release_channel:
+        description: Promotion channel
+        required: true
+        default: candidate
+        type: choice
+        options: [nightly, candidate, stable]
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  release-proof:
+    runs-on: [self-hosted, linux, x64, chromofold-release]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run deterministic trust contract
+        run: make -f m18-secure-release.mk m18-all
+      - name: Build isolated release copy A
+        run: ./scripts/release/build-reproducible.sh build/m18/repro-a
+      - name: Build isolated release copy B
+        run: ./scripts/release/build-reproducible.sh build/m18/repro-b
+      - name: Compare reproducible outputs
+        run: diff -ru build/m18/repro-a build/m18/repro-b
+      - name: Generate SBOM and provenance
+        run: ./scripts/release/generate-supply-chain.sh "${{ inputs.release_version }}"
+      - name: Scan release bundle
+        run: ./scripts/release/scan-release.sh build/release
+      - name: Sign release bundle
+        run: ./scripts/release/sign-release.sh build/release
+      - name: Verify signed release
+        run: python3 tools/chromofold_release.py verify build/release/release-manifest.json --root build/release
+      - name: Exercise certificate rotation
+        run: ./scripts/security/test-certificate-rotation.sh
+      - name: Exercise replay and authorization rejection
+        run: ./scripts/security/test-runtime-trust.sh
+      - name: Exercise rolling upgrade and rollback
+        run: ./scripts/release/test-upgrade-rollback.sh
+      - name: Validate M18 evidence
+        run: python3 integrations/llama.cpp/security/validate_m18_evidence.py integrations/llama.cpp/security/m18-evidence.json
+      - name: Upload release qualification bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: m18-release-${{ inputs.release_channel }}-${{ inputs.release_version }}
+          path: |
+            build/release/
+            integrations/llama.cpp/security/m18-evidence.json
+          if-no-files-found: error
+          retention-days: 30
