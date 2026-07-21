@@ -1,0 +1,30 @@
+name: M17 production scheduler
+on:
+  pull_request:
+    paths:
+      - 'include/chromofold/production_scheduler.h'
+      - 'src/production_scheduler.cpp'
+      - 'tests/m17_production_scheduler_contract.cpp'
+      - 'integrations/llama.cpp/scheduler/**'
+      - 'deploy/m17/**'
+      - 'm17-production-scheduler.mk'
+      - '.github/workflows/m17-production-scheduler.yml'
+  workflow_dispatch:
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: make -f m17-production-scheduler.mk m17-contract
+      - run: make -f m17-production-scheduler.mk m17-schema
+      - run: make -f m17-production-scheduler.mk m17-anchor-check
+      - run: make -f m17-production-scheduler.mk m17-false-evidence
+      - name: Validate Kubernetes YAML syntax
+        run: python3 - <<'PY'
+          import pathlib
+          for path in pathlib.Path('deploy/m17').glob('*.yaml'):
+              text=path.read_text()
+              assert 'apiVersion:' in text and 'kind:' in text
+          PY
