@@ -1,0 +1,44 @@
+name: M15 multi-GPU CUDA runtime
+
+on:
+  pull_request:
+    paths:
+      - 'include/chromofold/multigpu_cuda_runtime.h'
+      - 'src/cuda/multigpu_cuda_runtime.cu'
+      - 'tests/m15_multigpu_cuda_contract.cpp'
+      - 'integrations/llama.cpp/multigpu/**'
+      - 'm15-multigpu-cuda-runtime.mk'
+      - 'docs/m15-multigpu-cuda-runtime.md'
+      - '.github/workflows/m15-multigpu-cuda-runtime*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fast-contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate schema and scripts
+        run: make -f m15-multigpu-cuda-runtime.mk m15-schema
+      - name: Verify semantic anchors
+        run: make -f m15-multigpu-cuda-runtime.mk m15-anchor-check
+      - name: Reject fabricated evidence
+        run: make -f m15-multigpu-cuda-runtime.mk m15-false-evidence
+      - name: Reject dense fallback seams
+        run: |
+          if grep -R -E 'fallback_to_dense|dispatch_dense|run_dense_fallback|use_dense_fallback' src/cuda/multigpu_cuda_runtime.cu; then
+            echo 'Unexpected dense fallback implementation in M15' >&2
+            exit 1
+          fi
+
+  cuda-contract:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Jimver/cuda-toolkit@v0.2.22
+        with:
+          cuda: '12.6.3'
+      - run: make -f m15-multigpu-cuda-runtime.mk m15-contract CUDA_ARCH=80
