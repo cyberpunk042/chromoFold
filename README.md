@@ -92,6 +92,25 @@ avoided building was too small to matter. That negative result is kept in [`docs
 [the roadmap](specs/03-roadmap.md), because it taught us the rule: *fuse only when the avoided intermediate is
 large, or the consumer is sparse.* Honesty about negatives is the project's brand (principle **P7**).
 
+### Beyond the engine: runtime, packaging, and release qualification
+
+The table above is the **engine** (milestones M0–M8). On top of it the repository also has the layers that turn it
+into a real serving runtime — that's the spec's **M9** ("integrate with one real inference path") and the
+productionization work beyond it:
+
+- **Packaging** (`packaging/`): `libchromofold.so` + a stable C ABI + a capability descriptor + CPU-only
+  conformance seams, for a native runtime to link.
+- **Runtime integration** (`integrations/llama.cpp/`): a real llama.cpp **compressed paged-KV backend**
+  (`--kv-cache-backend chromofold`, honest-degrade — no silent fallback) plus a milestone stack (multi-GPU,
+  scheduler, security, disaggregated, distributed, production server), each with a machine-checkable evidence
+  schema.
+- **Release qualification** (`rc1-*.mk`, `tools/chromofold_*`): a serving adapter + hardware harness that runs
+  nine failure/lifecycle scenarios and produces a signed **PASS / FAIL / INCOMPLETE** evidence artifact — a
+  release is gated on a validated PASS, never on a green build.
+
+These are surveyed, with an honest note on what has and hasn't been independently verified, in
+**[`docs/INTEGRATION.md`](docs/INTEGRATION.md)**.
+
 ---
 
 ## Quickstart
@@ -138,6 +157,7 @@ Start at the top and go as deep as you like:
 | See the guiding principles (the "rules") | [`specs/00-constitution.md`](specs/00-constitution.md) |
 | See the milestone-by-milestone log + numbers | [`specs/03-roadmap.md`](specs/03-roadmap.md) |
 | Build / current status / gotchas | [`CLAUDE.md`](CLAUDE.md) |
+| Understand the runtime / packaging / release-qualification layers | [`docs/INTEGRATION.md`](docs/INTEGRATION.md) |
 | Use it as a C library | [`packaging/README.md`](packaging/README.md) |
 
 ### Where the code lives

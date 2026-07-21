@@ -173,9 +173,22 @@ So a speed number in this repo always comes attached to a proof that the fast th
 
 ---
 
-## 9. What's still open
+## 9. From engine to runtime (M9 and beyond)
 
-The one milestone that would *prove the thesis on a real workload* is **M9**: wire the fused KV-cache attention
-into an actual inference runtime and show a longer context or bigger batch fitting in the same GPU at
-equal-or-better latency. Everything above is the machinery; M9 is the payoff, and it needs a GPU-enabled Python/ML
-stack to plug into. The current status board is in [`../specs/03-roadmap.md`](../specs/03-roadmap.md).
+Everything above is the **engine** (milestones M0–M8). The milestone that *proves the thesis on a real workload*
+is **M9**: wire the fused KV-cache attention into an actual inference runtime and show a longer context or bigger
+batch fitting in the same GPU at equal-or-better latency. That integration work exists in this repo, in three
+layers described in **[`INTEGRATION.md`](INTEGRATION.md)**:
+
+- **Packaging** (`packaging/`) — the engine as a linkable `libchromofold.so` with a stable C ABI.
+- **Runtime integration** (`integrations/llama.cpp/`) — a real llama.cpp **compressed paged-KV backend**
+  (`--kv-cache-backend chromofold`, with an *honest-degrade* rule: it raises explicit errors rather than silently
+  falling back to a dense cache), plus a productionization milestone stack.
+- **Release qualification** (`rc1-*.mk`) — a serving adapter + hardware harness that runs failure/lifecycle
+  scenarios and emits a signed **PASS / FAIL / INCOMPLETE** evidence artifact; a release is gated on a *validated
+  PASS on real hardware*, never on a green build.
+
+**The honest status of the proof:** the machinery is in place and its CPU-side contracts pass, but the decisive
+workload PASS requires a machine that owns the GPU, a weight model, and the running serving runtime. On a
+developer box without those, the qualification correctly reports **INCOMPLETE** — it refuses to fabricate a pass.
+The milestone-by-milestone status board is in [`../specs/03-roadmap.md`](../specs/03-roadmap.md).

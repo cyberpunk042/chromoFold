@@ -192,9 +192,13 @@ crucially, learned **when it pays**.
 | M6 fusion (matmul, KV, sparse) | ✅ | 10.6× / 7.7–8.3× / 17.8× — both thesis branches, + one honest negative |
 | M7 FM-index `count`/`locate` | ✅ | bit-identical; ~19 M pattern-searches/s |
 | M8 delta clusters (dedup) | ◐ | 25× less memory, 63× cheaper/turn (runtime metrics need M9) |
-| M9 real-model proof | ☐ | **the finish line** — needs a GPU inference runtime |
+| M9 real-model proof | ◐ | integration built (llama.cpp compressed-KV backend + RC1 qualification); a validated hardware **PASS** is the remaining gate |
 | M10 Rust wrapper · M11 PTX tuning | ☐ | deliberately last |
 
 **The finish line (M9)** is the only result that would prove the thesis on a real workload: a live model fitting a
-longer context or bigger batch in the same GPU memory at equal-or-better latency. Everything above is the machinery
-that makes it possible; M9 is the payoff, and it awaits a GPU-enabled ML runtime to plug into.
+longer context or bigger batch in the same GPU memory at equal-or-better latency. The integration to do this
+exists — a llama.cpp **compressed paged-KV backend**, a `libchromofold.so` package, and an **RC1 release
+qualification** workflow — mapped in [`INTEGRATION.md`](INTEGRATION.md). Its CPU-side contracts pass; the remaining
+gate is a **validated PASS on real hardware** (a machine that owns the GPU + a weight model + the running serving
+runtime). On a box without those, the qualification honestly reports **INCOMPLETE** rather than fabricating a
+pass — which is exactly what it did when run here.
