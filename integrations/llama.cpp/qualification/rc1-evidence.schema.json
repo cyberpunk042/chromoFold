@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runtime", "security", "operations", "release"],
+  "properties": {
+    "runtime": {"type":"object","required":["requests","prompt_leaks","correctness_failures","cuda_errors","cross_tenant_contamination","unreconciled_references"],"properties":{"requests":{"type":"integer","minimum":1},"prompt_leaks":{"const":0},"correctness_failures":{"const":0},"cuda_errors":{"const":0},"cross_tenant_contamination":{"const":0},"unreconciled_references":{"const":0}}},
+    "security": {"type":"object","required":["mtls_observed","audit_chain_verified"],"properties":{"mtls_observed":{"const":true},"audit_chain_verified":{"const":true}}},
+    "operations": {"type":"object","required":["worker_failure_recovered","rolling_upgrade_observed","rollback_observed","incident_bundle_redacted"],"properties":{"worker_failure_recovered":{"const":true},"rolling_upgrade_observed":{"const":true},"rollback_observed":{"const":true},"incident_bundle_redacted":{"const":true}}},
+    "release": {"type":"object","required":["qualified_digest","promoted_digest","sbom","provenance"],"properties":{"qualified_digest":{"type":"string","pattern":"^sha256:"},"promoted_digest":{"type":"string","pattern":"^sha256:"},"sbom":{"const":true},"provenance":{"const":true}}}
+  }
+}
