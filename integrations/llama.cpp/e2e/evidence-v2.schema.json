@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chromofold.dev/schemas/m9-hardware-evidence-v2.json",
+  "title": "ChromoFold M9 hardware evidence v2",
+  "type": "object",
+  "required": ["schema_version", "environment", "model", "runtime", "topology", "counters", "memory", "latency", "numerics", "tokens", "sanitizer", "capacity"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "environment": {
+      "type": "object",
+      "required": ["gpu_name", "compute_capability", "cuda_toolkit", "driver", "os", "compiler"],
+      "properties": {
+        "gpu_name": {"type": "string", "minLength": 1},
+        "compute_capability": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
+        "cuda_toolkit": {"type": "string", "minLength": 1},
+        "driver": {"type": "string", "minLength": 1},
+        "os": {"type": "string", "minLength": 1},
+        "compiler": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "model": {
+      "type": "object",
+      "required": ["path", "sha256", "size_bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "architecture": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["llama_commit", "chromofold_commit", "backend", "command", "exit_code", "completed"],
+      "properties": {
+        "llama_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "chromofold_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "backend": {"enum": ["dense", "chromofold"]},
+        "command": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "exit_code": {"type": "integer"},
+        "completed": {"type": "boolean"}
+      },
+      "additionalProperties": true
+    },
+    "topology": {
+      "type": "object",
+      "required": ["layer_count", "query_heads", "kv_heads", "head_dim", "gqa_group_size", "context_size", "page_size"],
+      "properties": {
+        "layer_count": {"type": "integer", "minimum": 1},
+        "query_heads": {"type": "integer", "minimum": 1},
+        "kv_heads": {"type": "integer", "minimum": 1},
+        "head_dim": {"type": "integer", "minimum": 1, "maximum": 128},
+        "gqa_group_size": {"type": "integer", "minimum": 1},
+        "context_size": {"type": "integer", "minimum": 1},
+        "page_size": {"enum": [64, 128, 256]}
+      },
+      "additionalProperties": true
+    },
+    "counters": {
+      "type": "object",
+      "required": ["device_append_calls", "seal_successes", "descriptor_publications", "compressed_attention_launches", "sealed_pages_consumed", "sealed_values_consumed", "active_values_consumed", "dense_fallback_launches", "cuda_errors"],
+      "properties": {
+        "device_append_calls": {"type": "integer", "minimum": 0},
+        "seal_successes": {"type": "integer", "minimum": 0},
+        "descriptor_publications": {"type": "integer", "minimum": 0},
+        "compressed_attention_launches": {"type": "integer", "minimum": 0},
+        "sealed_pages_consumed": {"type": "integer", "minimum": 0},
+        "sealed_values_consumed": {"type": "integer", "minimum": 0},
+        "active_values_consumed": {"type": "integer", "minimum": 0},
+        "dense_fallback_launches": {"type": "integer", "minimum": 0},
+        "cuda_errors": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": {"type": ["integer", "number", "string", "boolean", "null"]}
+    },
+    "memory": {
+      "type": "object",
+      "required": ["measured", "peak_process_vram_bytes", "peak_chromofold_owned_bytes"],
+      "properties": {
+        "measured": {"const": true},
+        "peak_process_vram_bytes": {"type": "integer", "minimum": 1},
+        "peak_chromofold_owned_bytes": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": true
+    },
+    "latency": {
+      "type": "object",
+      "required": ["prefill_ms", "decode_ms", "prompt_tokens_per_second", "decode_tokens_per_second"],
+      "properties": {
+        "prefill_ms": {"type": "number", "minimum": 0},
+        "decode_ms": {"type": "number", "minimum": 0},
+        "prompt_tokens_per_second": {"type": "number", "minimum": 0},
+        "decode_tokens_per_second": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "numerics": {
+      "type": "object",
+      "required": ["all_finite", "max_abs_error", "mean_abs_error", "top1_agreement"],
+      "properties": {
+        "all_finite": {"const": true},
+        "max_abs_error": {"type": "number", "minimum": 0},
+        "mean_abs_error": {"type": "number", "minimum": 0},
+        "top1_agreement": {"type": "number", "minimum": 0, "maximum": 1}
+      },
+      "additionalProperties": true
+    },
+    "tokens": {
+      "type": "object",
+      "required": ["prompt_count", "generated_count", "first_divergence"],
+      "properties": {
+        "prompt_count": {"type": "integer", "minimum": 1},
+        "generated_count": {"type": "integer", "minimum": 1},
+        "first_divergence": {"type": ["integer", "null"], "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "sanitizer": {
+      "type": "object",
+      "required": ["memcheck", "racecheck", "initcheck", "synccheck"],
+      "properties": {
+        "memcheck": {"const": "passed"},
+        "racecheck": {"const": "passed"},
+        "initcheck": {"const": "passed"},
+        "synccheck": {"const": "passed"}
+      },
+      "additionalProperties": false
+    },
+    "capacity": {
+      "type": "object",
+      "required": ["dense_max_context", "chromofold_max_context", "results"],
+      "properties": {
+        "dense_max_context": {"type": "integer", "minimum": 0},
+        "chromofold_max_context": {"type": "integer", "minimum": 0},
+        "results": {"type": "array"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}
