@@ -39,12 +39,11 @@ jobs:
       - name: Verify adapter contracts
         run: make -f rc1-serving-adapter.mk rc1-serving-all
       - name: Run repository-owned runtime harness
-        env:
-          CHROMOFOLD_QUALIFICATION_ADMIN_TOKEN: ${{ secrets.CHROMOFOLD_QUALIFICATION_ADMIN_TOKEN }}
         run: |
           python3 tools/chromofold_runtime_harness.py \
             --mode "${{ inputs.mode }}" \
-            --runtime-url "${{ inputs.runtime_url }}" \
+            --runtime-endpoint "${{ inputs.runtime_url }}" \
+            --metrics-endpoint "${{ inputs.runtime_url }}/metrics" \
             --model "${{ inputs.model_path }}" \
             --release-digest "${{ inputs.release_digest }}" \
             --artifact qualification/rc1-runtime-evidence.json \
