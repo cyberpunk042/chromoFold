@@ -1,0 +1,44 @@
+name: M9 runtime core
+
+on:
+  pull_request:
+    paths:
+      - "include/chromofold/kv_runtime.h"
+      - "src/runtime/**"
+      - "tests/kv_runtime_test.cpp"
+      - "tests/Makefile"
+      - ".github/workflows/m9-runtime.yml"
+  push:
+    branches: [main]
+    paths:
+      - "include/chromofold/kv_runtime.h"
+      - "src/runtime/**"
+      - "tests/kv_runtime_test.cpp"
+      - "tests/Makefile"
+      - ".github/workflows/m9-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cpu-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run with ASan and UBSan
+        run: make -C tests clean run
+      - name: Compile C header seam
+        run: |
+          cat > /tmp/kv_header_seam.c <<'EOF'
+          #include "chromofold/kv_runtime.h"
+          int main(void) {
+              cf_kv_page_view page = {0};
+              cf_kv_cache_layout layout = {0};
+              cf_kv_memory_stats stats = {0};
+              (void)page;
+              (void)layout;
+              (void)stats;
+              return CF_KV_RUNTIME_ABI_VERSION;
+          }
+          EOF
+          cc -std=c11 -Wall -Wextra -Wpedantic -Werror -Iinclude -c /tmp/kv_header_seam.c -o /tmp/kv_header_seam.o
