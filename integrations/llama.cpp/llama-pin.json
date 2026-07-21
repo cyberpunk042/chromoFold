@@ -1,0 +1,20 @@
+{
+  "repository": "https://github.com/ggml-org/llama.cpp",
+  "ref": "master",
+  "required_paths": [
+    "src/llama-kv-cache.cpp",
+    "src/llama-kv-cache.h",
+    "src/llama-context.cpp",
+    "common/arg.cpp"
+  ],
+  "integration_mode": "external-adapter",
+  "supported_backend": "cuda",
+  "required_operations": [
+    "append",
+    "clear",
+    "seq_rm",
+    "seq_cp",
+    "seq_shift",
+    "stats"
+  ]
+}

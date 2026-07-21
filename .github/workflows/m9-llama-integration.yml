@@ -1,0 +1,44 @@
+name: M9 llama integration
+
+on:
+  pull_request:
+    paths:
+      - "include/chromofold/compressed_kv_cache.hpp"
+      - "src/runtime/compressed_kv_cache.cu"
+      - "integrations/llama.cpp/**"
+      - "tests/llama_kv_adapter_seam.cpp"
+      - "m9-llama.mk"
+      - ".github/workflows/m9-llama-integration.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  adapter-seam:
+    runs-on: ubuntu-latest
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compiler, make, and Python
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends build-essential ca-certificates python3
+      - name: Compile adapter translation units
+        run: make -f m9-llama.mk llama-adapter-compile
+      - name: Run no-GPU adapter seam
+        run: make -f m9-llama.mk llama-adapter-seam
+      - name: Validate pinned integration manifest
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          pin = json.loads(Path('integrations/llama.cpp/llama-pin.json').read_text())
+          assert pin['integration_mode'] == 'external-adapter'
+          assert pin['supported_backend'] == 'cuda'
+          assert {'append', 'clear', 'seq_rm', 'seq_cp', 'seq_shift', 'stats'} <= set(pin['required_operations'])
+          print('llama.cpp integration manifest valid')
+          PY
