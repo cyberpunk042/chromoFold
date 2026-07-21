@@ -22,7 +22,7 @@ bool counted_pointer(const void *pointer, uint64_t count) {
     return count == 0 || pointer != nullptr;
 }
 
-bool finite(double value) {
+bool finite_value(double value) {
     return std::isfinite(value);
 }
 
@@ -177,7 +177,7 @@ extern "C" cf_status cf_kv_cache_memory_stats(const cf_kv_cache_layout *layout, 
 }
 
 extern "C" cf_status cf_online_softmax_init(cf_online_softmax_state *state, double *weighted_values,
-                                               uint32_t dim) {
+                                                uint32_t dim) {
     if (state == nullptr || weighted_values == nullptr || dim == 0 || dim > CF_KV_MAX_HEAD_DIM) {
         return CF_ERR_INVALID_ARGUMENT;
     }
@@ -191,9 +191,9 @@ extern "C" cf_status cf_online_softmax_init(cf_online_softmax_state *state, doub
 }
 
 extern "C" cf_status cf_online_softmax_accumulate(cf_online_softmax_state *state, double score,
-                                                     const float *value) {
+                                                      const float *value) {
     if (state == nullptr || state->weighted_values == nullptr || value == nullptr || state->dim == 0 ||
-        !finite(score)) {
+        !finite_value(score)) {
         return CF_ERR_INVALID_ARGUMENT;
     }
 
@@ -217,7 +217,7 @@ extern "C" cf_status cf_online_softmax_accumulate(cf_online_softmax_state *state
 }
 
 extern "C" cf_status cf_online_softmax_merge(cf_online_softmax_state *dst,
-                                                const cf_online_softmax_state *src) {
+                                                 const cf_online_softmax_state *src) {
     if (dst == nullptr || src == nullptr || dst->weighted_values == nullptr || src->weighted_values == nullptr ||
         dst->dim == 0 || dst->dim != src->dim) {
         return CF_ERR_INVALID_ARGUMENT;
@@ -244,7 +244,7 @@ extern "C" cf_status cf_online_softmax_merge(cf_online_softmax_state *dst,
 
 extern "C" cf_status cf_online_softmax_finalize(const cf_online_softmax_state *state, float *out) {
     if (state == nullptr || out == nullptr || state->weighted_values == nullptr || !state->initialized ||
-        state->dim == 0 || !finite(state->exp_sum) || state->exp_sum <= 0.0) {
+        state->dim == 0 || !finite_value(state->exp_sum) || state->exp_sum <= 0.0) {
         return CF_ERR_INVALID_ARGUMENT;
     }
     for (uint32_t d = 0; d < state->dim; ++d) {
