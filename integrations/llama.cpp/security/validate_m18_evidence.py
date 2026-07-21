@@ -30,7 +30,7 @@ def main() -> int:
         require(authorization["default_deny"] is True, "authorization is not default deny")
         require(integrity["manifests_verified"] > 0, "no manifest was verified")
         require(integrity["tampered_manifests_rejected"] > 0, "tampering was not rejected")
-        require(integrity["replays_rejected"] > 0, "replay rejection was not proven")
+        require(integrity["replay_rejections"] > 0, "replay rejection was not proven")
         require(integrity["audit_chain_verified"] is True, "audit chain not verified")
         require(all(supply[name] is True for name in ["reproducible_build", "sbom_generated", "provenance_generated", "images_by_digest"]), "supply-chain evidence incomplete")
         require(supply["critical_vulnerabilities"] == 0, "critical vulnerabilities remain")
