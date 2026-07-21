@@ -1,0 +1,79 @@
+name: M16 disaggregated serving self-hosted
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_path:
+        description: Runner-local GGUF path
+        required: true
+      router_port:
+        description: Router port
+        required: true
+        default: '8090'
+
+permissions:
+  contents: read
+
+jobs:
+  cluster-proof:
+    runs-on: [self-hosted, linux, x64, nvidia]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record environment
+        run: |
+          mkdir -p build/m16/evidence
+          nvidia-smi -q > build/m16/evidence/nvidia-smi.txt
+          sha256sum '${{ inputs.model_path }}' > build/m16/evidence/model.sha256
+          git rev-parse HEAD > build/m16/evidence/chromofold-commit.txt
+      - name: Build fast contracts
+        run: make -f m16-disaggregated-serving.mk m16-contract m16-schema m16-anchor-check m16-false-evidence
+      - name: Build pinned llama-server
+        run: |
+          make -f m11-pinned-llama-server.mk m11-fetch
+          make -f m11-pinned-llama-server.mk m11-apply
+          make -f m11-pinned-llama-server.mk m11-build
+      - name: Start prefill worker
+        run: |
+          build/m11-pinned-llama-server/llama.cpp/build/bin/llama-server -m '${{ inputs.model_path }}' \
+            --chromofold-role prefill-worker --chromofold-cluster-port 8091 --port 8081 \
+            > build/m16/evidence/prefill.log 2>&1 & echo $! > build/m16/prefill.pid
+      - name: Start decode workers
+        run: |
+          build/m11-pinned-llama-server/llama.cpp/build/bin/llama-server -m '${{ inputs.model_path }}' \
+            --chromofold-role decode-worker --chromofold-cluster-port 8092 --port 8082 \
+            > build/m16/evidence/decode-1.log 2>&1 & echo $! > build/m16/decode-1.pid
+          build/m11-pinned-llama-server/llama.cpp/build/bin/llama-server -m '${{ inputs.model_path }}' \
+            --chromofold-role decode-worker --chromofold-cluster-port 8093 --port 8083 \
+            > build/m16/evidence/decode-2.log 2>&1 & echo $! > build/m16/decode-2.pid
+      - name: Start router
+        run: |
+          build/m11-pinned-llama-server/llama.cpp/build/bin/llama-server -m '${{ inputs.model_path }}' \
+            --chromofold-role router --chromofold-prefill 127.0.0.1:8091 \
+            --chromofold-decode 127.0.0.1:8092,127.0.0.1:8093 --port '${{ inputs.router_port }}' \
+            > build/m16/evidence/router.log 2>&1 & echo $! > build/m16/router.pid
+          for i in $(seq 1 120); do curl -fsS http://127.0.0.1:${{ inputs.router_port }}/health && exit 0; sleep 1; done
+          exit 1
+      - name: Run concurrent cluster workload
+        run: python3 integrations/llama.cpp/disaggregated/run_m16_cluster.py --router http://127.0.0.1:${{ inputs.router_port }} --requests 64 --output build/m16/evidence/requests.json
+      - name: Inject partial transfer and stale lease
+        run: |
+          curl -fsS -X POST http://127.0.0.1:${{ inputs.router_port }}/chromofold/test/inject-partial-transfer
+          curl -fsS -X POST http://127.0.0.1:${{ inputs.router_port }}/chromofold/test/inject-stale-lease
+      - name: Inject decode worker failure
+        run: kill -KILL "$(cat build/m16/decode-1.pid)"
+      - name: Verify replica recovery
+        run: python3 integrations/llama.cpp/disaggregated/run_m16_cluster.py --router http://127.0.0.1:${{ inputs.router_port }} --requests 16 --output build/m16/evidence/recovery-requests.json
+      - name: Graceful shutdown
+        if: always()
+        run: |
+          for file in build/m16/router.pid build/m16/prefill.pid build/m16/decode-1.pid build/m16/decode-2.pid; do test -f "$file" && kill -INT "$(cat "$file")" || true; done
+          sleep 5
+      - name: Validate strict evidence
+        run: python3 integrations/llama.cpp/disaggregated/validate_m16_evidence.py build/m16/evidence/m16-evidence.json
+      - name: Upload proof bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m16-disaggregated-serving-proof
+          path: build/m16/evidence
