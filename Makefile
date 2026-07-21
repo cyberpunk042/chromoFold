@@ -4,7 +4,7 @@
 ARCH   ?= sm_75
 NVCC   ?= nvcc
 CXX    ?= g++
-PYTHON ?= python
+PYTHON ?= python3
 CXXSTD ?= c++17
 NVFLAGS = -O3 -std=$(CXXSTD) -arch=$(ARCH) -Iinclude -Ibenchmarks --expt-relaxed-constexpr -lineinfo
 
@@ -12,7 +12,7 @@ BUILD = build
 REFS  = benchmarks/refs
 VOCABS = 4 16 256 32768 65536 131072
 
-.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet rans fm-search fused-matmul kv-attention sparse-gather delta suffix-array build-index
+.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet rans fm-search fused-matmul kv-attention sparse-gather delta suffix-array build-index test test-quick
 
 all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet $(BUILD)/rans_bench $(BUILD)/fm_search $(BUILD)/fused_matmul $(BUILD)/fused_kv_attention $(BUILD)/sparse_gather $(BUILD)/delta_bench $(BUILD)/suffix_array
 
@@ -181,6 +181,14 @@ fused: $(BUILD)/fused_embedding
 	@mkdir -p $(REFS)
 	@test -f $(REFS)/ref_V32768.cfwv || $(PYTHON) tools/export_reference.py $(REFS)/ref_V32768.cfwv --vocab 32768 >/dev/null
 	$(BUILD)/fused_embedding $(REFS)/ref_V32768.cfwv
+
+# Unified contract test runner: builds and runs all M9–M15 CPU contracts,
+# validates every evidence schema, and rejects fabricated evidence.
+test:
+	$(PYTHON) tests/run_all_contracts.py
+
+test-quick:
+	$(PYTHON) tests/run_all_contracts.py --quick
 
 clean:
 	rm -rf $(BUILD) $(REFS)
