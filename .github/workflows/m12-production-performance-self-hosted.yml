@@ -37,11 +37,16 @@ jobs:
           sha256sum '${{ inputs.model_path }}' > build/m12-production-performance/evidence/model.sha256
       - name: Compile optimized and reference contracts
         run: make -f m12-production-performance.mk m12-compile CUDA_ARCH='${{ inputs.cuda_arch }}'
-      - name: Apply and build pinned llama-server
+      - name: Apply pinned llama-server integration
         run: |
           make -f m11-pinned-llama-server.mk m11-fetch
           make -f m11-pinned-llama-server.mk m11-apply
-          make -f m11-pinned-llama-server.mk m11-build CUDA_ARCH='${{ inputs.cuda_arch }}'
+      - name: Build patched llama-server
+        run: |
+          cmake -S build/llama.cpp-m11 -B build/llama.cpp-m11/build \
+            -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES='${{ inputs.cuda_arch }}' \
+            -DLLAMA_BUILD_SERVER=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/llama.cpp-m11/build --target llama-server -j "$(nproc)"
       - name: Compute Sanitizer memcheck
         run: compute-sanitizer --tool memcheck build/m12-production-performance/m12_production_attention_contract |& tee build/m12-production-performance/evidence/memcheck.log
       - name: Compute Sanitizer racecheck
@@ -53,16 +58,17 @@ jobs:
       - name: Run dense reference optimized matrix
         run: |
           python3 integrations/llama.cpp/performance/run_benchmark_matrix.py \
-            --server build/m11-pinned-llama-server/llama.cpp/build/bin/llama-server \
+            --server build/llama.cpp-m11/build/bin/llama-server \
             --model '${{ inputs.model_path }}' \
             --contexts '${{ inputs.contexts }}' \
             --slots '${{ inputs.slots }}' \
             --output build/m12-production-performance/benchmarks
       - name: Start optimized server
         run: |
-          build/m11-pinned-llama-server/llama.cpp/build/bin/llama-server \
+          build/llama.cpp-m11/build/bin/llama-server \
             -m '${{ inputs.model_path }}' --kv-cache-backend chromofold \
             --chromofold-kernel optimized --parallel 8 --port 8080 \
+            --chromofold-evidence build/m12-production-performance/evidence/performance-evidence.json \
             > build/m12-production-performance/evidence/server.log 2>&1 &
           echo $! > build/m12-production-performance/server.pid
           for i in $(seq 1 120); do curl -fsS http://127.0.0.1:8080/health && exit 0; sleep 1; done
