@@ -219,11 +219,12 @@ extern "C" int cf_adaptive_encode(cf_adaptive_runtime * runtime,
         return -1;
     }
 
+    const uint32_t fixed_int4 = static_cast<uint32_t>(CF_PAGE_INT4_BLOCKWISE);
     const uint32_t key_codec = runtime->config.policy == CF_POLICY_FIXED_INT4
-        ? CF_PAGE_INT4_BLOCKWISE
+        ? fixed_int4
         : choose(runtime, key_analysis);
     const uint32_t value_codec = runtime->config.policy == CF_POLICY_FIXED_INT4
-        ? CF_PAGE_INT4_BLOCKWISE
+        ? fixed_int4
         : choose(runtime, value_analysis);
 
     out->key_codec = {1, key_codec, runtime->config.block_size, 0};
