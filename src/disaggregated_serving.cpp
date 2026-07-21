@@ -160,17 +160,50 @@ extern "C" int cf_cluster_record_transfer(cf_cluster_runtime * runtime, const cf
 }
 
 extern "C" int cf_cluster_mark_worker_failed(cf_cluster_runtime * runtime, uint64_t worker_id) {
-    if (!runtime || !worker_id) return -1; std::lock_guard<std::mutex> guard(runtime->mutex); auto found = runtime->workers.find(worker_id); if (found == runtime->workers.end()) return -1;
-    found->second.healthy = 0; for (const auto & page : runtime->pages) if (page.second.lease.owner_worker_id == worker_id && page.second.replica_count > 1) ++runtime->counters.replica_recoveries; return 0;
+    if (!runtime || !worker_id) {
+        return -1;
+    }
+
+    std::lock_guard<std::mutex> guard(runtime->mutex);
+    auto found = runtime->workers.find(worker_id);
+    if (found == runtime->workers.end()) {
+        return -1;
+    }
+
+    found->second.healthy = 0;
+    for (const auto & page : runtime->pages) {
+        if (page.second.lease.owner_worker_id == worker_id && page.second.replica_count > 1) {
+            ++runtime->counters.replica_recoveries;
+        }
+    }
+    return 0;
 }
 
 extern "C" int cf_cluster_shutdown_audit(cf_cluster_runtime * runtime) {
-    if (!runtime) return -1; std::lock_guard<std::mutex> guard(runtime->mutex); runtime->shutting_down = true;
-    runtime->counters.page_refs_at_shutdown = 0; runtime->counters.snapshot_refs_at_shutdown = 0;
-    return runtime->inflight_transfers == 0 && runtime->counters.cross_request_contamination == 0 && runtime->counters.dense_fallback_launches == 0 ? 0 : -1;
+    if (!runtime) {
+        return -1;
+    }
+
+    std::lock_guard<std::mutex> guard(runtime->mutex);
+    runtime->shutting_down = true;
+    runtime->counters.page_refs_at_shutdown = 0;
+    runtime->counters.snapshot_refs_at_shutdown = 0;
+
+    return runtime->inflight_transfers == 0 &&
+                   runtime->counters.cross_request_contamination == 0 &&
+                   runtime->counters.dense_fallback_launches == 0
+               ? 0
+               : -1;
 }
 
 extern "C" int cf_cluster_get_counters(const cf_cluster_runtime * runtime, cf_cluster_counters * counters) {
-    if (!runtime || !counters) return -1; std::lock_guard<std::mutex> guard(runtime->mutex); *counters = runtime->counters; return 0;
+    if (!runtime || !counters) {
+        return -1;
+    }
+
+    std::lock_guard<std::mutex> guard(runtime->mutex);
+    *counters = runtime->counters;
+    return 0;
 }
+
 extern "C" const char * cf_cluster_last_error(const cf_cluster_runtime * runtime) { return runtime ? runtime->error.c_str() : "runtime is null"; }
