@@ -4,16 +4,20 @@ on:
   pull_request:
     paths:
       - "include/chromofold/kv_runtime.h"
+      - "include/chromofold/kv_reference.hpp"
       - "src/runtime/**"
       - "tests/kv_runtime_test.cpp"
+      - "tests/kv_reference_test.cpp"
       - "tests/Makefile"
       - ".github/workflows/m9-runtime.yml"
   push:
     branches: [main]
     paths:
       - "include/chromofold/kv_runtime.h"
+      - "include/chromofold/kv_reference.hpp"
       - "src/runtime/**"
       - "tests/kv_runtime_test.cpp"
+      - "tests/kv_reference_test.cpp"
       - "tests/Makefile"
       - ".github/workflows/m9-runtime.yml"
 
