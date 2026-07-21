@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChromoFold M18 Security Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["release", "transport", "authorization", "integrity", "supply_chain", "upgrade", "isolation", "shutdown"],
+  "properties": {
+    "release": {"type": "object", "required": ["version", "git_commit", "artifact_signatures_verified"], "properties": {"version": {"type": "string", "minLength": 1}, "git_commit": {"type": "string", "minLength": 7}, "artifact_signatures_verified": {"const": true}}},
+    "transport": {"type": "object", "required": ["mtls_connections", "unauthenticated_rejections", "rotation_without_outage", "expired_credentials_rejected"], "properties": {"mtls_connections": {"type": "integer", "minimum": 1}, "unauthenticated_rejections": {"type": "integer", "minimum": 1}, "rotation_without_outage": {"const": true}, "expired_credentials_rejected": {"type": "integer", "minimum": 1}}},
+    "authorization": {"type": "object", "required": ["grants", "denials", "default_deny"], "properties": {"grants": {"type": "integer", "minimum": 1}, "denials": {"type": "integer", "minimum": 1}, "default_deny": {"const": true}}},
+    "integrity": {"type": "object", "required": ["manifests_verified", "tampered_manifests_rejected", "replay_rejections", "audit_chain_verified"], "properties": {"manifests_verified": {"type": "integer", "minimum": 1}, "tampered_manifests_rejected": {"type": "integer", "minimum": 1}, "replay_rejections": {"type": "integer", "minimum": 1}, "audit_chain_verified": {"const": true}}},
+    "supply_chain": {"type": "object", "required": ["reproducible_build", "sbom_generated", "provenance_generated", "images_by_digest", "critical_vulnerabilities"], "properties": {"reproducible_build": {"const": true}, "sbom_generated": {"const": true}, "provenance_generated": {"const": true}, "images_by_digest": {"const": true}, "critical_vulnerabilities": {"const": 0}}},
+    "upgrade": {"type": "object", "required": ["rolling_upgrade_completed", "incompatible_upgrade_rejected", "rollback_completed"], "properties": {"rolling_upgrade_completed": {"const": true}, "incompatible_upgrade_rejected": {"const": true}, "rollback_completed": {"const": true}}},
+    "isolation": {"type": "object", "required": ["cross_tenant_substitutions_rejected", "cross_tenant_contamination"], "properties": {"cross_tenant_substitutions_rejected": {"type": "integer", "minimum": 1}, "cross_tenant_contamination": {"const": 0}}},
+    "shutdown": {"type": "object", "required": ["active_page_refs", "active_snapshot_refs", "dense_fallback_launches"], "properties": {"active_page_refs": {"const": 0}, "active_snapshot_refs": {"const": 0}, "dense_fallback_launches": {"const": 0}}}
+  }
+}

@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chromofold-runtime
+  namespace: chromofold
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chromofold-runtime
+  namespace: chromofold
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["chromofold-runtime"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chromofold-runtime
+  namespace: chromofold
+subjects:
+  - kind: ServiceAccount
+    name: chromofold-runtime
+    namespace: chromofold
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: chromofold-runtime
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chromofold-router
+  namespace: chromofold
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: chromofold-router
+  template:
+    metadata:
+      labels:
+        app: chromofold-router
+    spec:
+      serviceAccountName: chromofold-runtime
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: router
+          image: ghcr.io/cyberpunk042/chromofold@sha256:RELEASE_DIGEST
+          args: ["--role", "router", "--config", "/etc/chromofold/config.json"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: https
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: https
+              scheme: HTTPS
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: https
+              scheme: HTTPS
+          volumeMounts:
+            - name: config
+              mountPath: /etc/chromofold
+              readOnly: true
+            - name: tls
+              mountPath: /var/run/secrets/chromofold/tls
+              readOnly: true
+            - name: runtime
+              mountPath: /run/chromofold
+      volumes:
+        - name: config
+          configMap:
+            name: chromofold-runtime
+        - name: tls
+          secret:
+            secretName: chromofold-runtime-tls
+            defaultMode: 0400
+        - name: runtime
+          emptyDir: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: chromofold
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: router-control-plane
+  namespace: chromofold
+spec:
+  podSelector:
+    matchLabels:
+      app: chromofold-router
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: chromofold-ingress
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchExpressions:
+              - key: chromofold-role
+                operator: In
+                values: ["prefill", "decode", "scheduler"]
+      ports:
+        - protocol: TCP
+          port: 8443

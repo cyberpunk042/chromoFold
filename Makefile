@@ -201,8 +201,7 @@ conformance:
 m16-contract:
 	$(MAKE) -f m16-disaggregated.mk m16-contract
 
-# Benchmark smoke: core benchmarks that don't need the Warp prototype.
-# Skips gracefully if reference files are missing (they need the prototype Python).
+# Benchmark smoke: CPU generation is mandatory; GPU verification runs only with a usable NVIDIA driver.
 bench-smoke: $(BUILD)/gpu_access $(BUILD)/rank_bench $(BUILD)/rrr_wavelet $(BUILD)/fm_search $(BUILD)/suffix_array $(BUILD)/build_index
 	@echo "=== Access benchmark ==="
 	@test -f $(REFS)/reference.cfwv \
@@ -223,9 +222,14 @@ bench-smoke: $(BUILD)/gpu_access $(BUILD)/rank_bench $(BUILD)/rrr_wavelet $(BUIL
 	@echo "=== Suffix-array build ==="
 	$(BUILD)/suffix_array
 	@echo "=== Native C++ build + verify ==="
+	@mkdir -p $(REFS)
 	$(BUILD)/build_index $(REFS)/cpp_V64.cfrw --vocab 64 --fm $(REFS)/cpp_V64.cffm
-	$(BUILD)/rrr_wavelet $(REFS)/cpp_V64.cfrw
-	$(BUILD)/fm_search $(REFS)/cpp_V64.cffm
+	@if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then \
+	  $(BUILD)/rrr_wavelet $(REFS)/cpp_V64.cfrw; \
+	  $(BUILD)/fm_search $(REFS)/cpp_V64.cffm; \
+	else \
+	  echo "  [SKIP] native GPU verification: no usable NVIDIA driver/device"; \
+	fi
 
 clean:
 	rm -rf $(BUILD) $(REFS)
