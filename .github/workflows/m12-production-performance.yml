@@ -1,0 +1,47 @@
+name: M12 production performance
+
+on:
+  pull_request:
+    paths:
+      - 'include/chromofold/production_attention.h'
+      - 'src/cuda/production_attention.cu'
+      - 'integrations/llama.cpp/performance/**'
+      - 'tests/m12_production_attention_contract.cpp'
+      - 'm12-production-performance.mk'
+      - 'docs/m12-production-performance.md'
+      - '.github/workflows/m12-production-performance*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install CUDA toolkit
+        uses: Jimver/cuda-toolkit@v0.2.22
+        with:
+          cuda: '12.6.3'
+      - name: Compile optimized attention
+        run: make -f m12-production-performance.mk m12-compile CUDA_ARCH=80
+      - name: Run host contract
+        run: make -f m12-production-performance.mk m12-contract CUDA_ARCH=80
+      - name: Verify optimized kernel anchors
+        run: make -f m12-production-performance.mk m12-anchor-check
+      - name: Validate schemas and scripts
+        run: make -f m12-production-performance.mk m12-schema
+      - name: Reject fabricated evidence
+        run: make -f m12-production-performance.mk m12-false-evidence
+      - name: Reject executable dense fallback seams
+        run: |
+          if grep -R -E 'fallback_to_dense|dispatch_dense|run_dense_fallback|use_dense_fallback' src/cuda/production_attention.cu; then
+            echo 'Unexpected dense fallback implementation in M12' >&2
+            exit 1
+          fi
+      - name: Verify proof workflow anchors
+        run: |
+          grep -F 'compute-sanitizer --tool memcheck' .github/workflows/m12-production-performance-self-hosted.yml
+          grep -F 'run_benchmark_matrix.py' .github/workflows/m12-production-performance-self-hosted.yml
+          grep -F 'validate_performance_evidence.py' .github/workflows/m12-production-performance-self-hosted.yml
