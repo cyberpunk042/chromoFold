@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChromoFold M14 distributed multi-GPU evidence",
+  "type": "object",
+  "required": ["topology", "routing", "transfers", "attention", "cache", "isolation", "failures", "shutdown"],
+  "properties": {
+    "topology": {
+      "type": "object",
+      "required": ["device_count", "device_uuids", "peer_matrix_verified"],
+      "properties": {"device_count": {"type": "integer", "minimum": 2}, "peer_matrix_verified": {"const": true}}
+    },
+    "routing": {
+      "type": "object",
+      "required": ["sequences_placed", "devices_used", "batches_dispatched"],
+      "properties": {"sequences_placed": {"type": "integer", "minimum": 2}, "devices_used": {"type": "integer", "minimum": 2}, "batches_dispatched": {"type": "integer", "minimum": 1}}
+    },
+    "transfers": {
+      "type": "object",
+      "required": ["peer_copies", "peer_bytes", "transfer_errors"],
+      "properties": {"peer_copies": {"type": "integer", "minimum": 1}, "peer_bytes": {"type": "integer", "minimum": 1}, "transfer_errors": {"const": 0}}
+    },
+    "attention": {
+      "type": "object",
+      "required": ["tensor_parallel_batches", "mixed_codec_batches", "dense_fallback_launches", "cuda_errors"],
+      "properties": {"tensor_parallel_batches": {"type": "integer", "minimum": 1}, "mixed_codec_batches": {"type": "integer", "minimum": 1}, "dense_fallback_launches": {"const": 0}, "cuda_errors": {"const": 0}}
+    },
+    "cache": {
+      "type": "object",
+      "required": ["shared_index_verified", "remote_pages_loaded", "duplicate_pages_avoided"],
+      "properties": {"shared_index_verified": {"const": true}, "remote_pages_loaded": {"type": "integer", "minimum": 1}, "duplicate_pages_avoided": {"type": "integer", "minimum": 1}}
+    },
+    "isolation": {
+      "type": "object",
+      "required": ["concurrent_http_passed", "cross_device_contamination"],
+      "properties": {"concurrent_http_passed": {"const": true}, "cross_device_contamination": {"const": 0}}
+    },
+    "failures": {
+      "type": "object",
+      "required": ["injected_device_failures", "fail_closed_passed"],
+      "properties": {"injected_device_failures": {"type": "integer", "minimum": 1}, "fail_closed_passed": {"const": true}}
+    },
+    "shutdown": {
+      "type": "object",
+      "required": ["audit_passed", "page_refs", "snapshot_refs"],
+      "properties": {"audit_passed": {"const": true}, "page_refs": {"const": 0}, "snapshot_refs": {"const": 0}}
+    }
+  }
+}

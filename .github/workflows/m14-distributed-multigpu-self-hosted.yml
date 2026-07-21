@@ -1,0 +1,54 @@
+name: M14 distributed multi-GPU self-hosted
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_path:
+        description: Runner-local GGUF path
+        required: true
+      devices:
+        description: CUDA device list
+        required: true
+        default: '0,1'
+
+permissions:
+  contents: read
+
+jobs:
+  hardware-proof:
+    runs-on: [self-hosted, linux, x64, nvidia, multi-gpu]
+    timeout-minutes: 360
+    env:
+      CUDA_VISIBLE_DEVICES: ${{ inputs.devices }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record topology
+        run: |
+          mkdir -p build/m14/evidence
+          nvidia-smi -q > build/m14/evidence/nvidia-smi.txt
+          nvidia-smi topo -m > build/m14/evidence/topology.txt
+          sha256sum '${{ inputs.model_path }}' > build/m14/evidence/model.sha256
+      - name: Build contracts
+        run: make -f m14-distributed-multigpu.mk m14-contract
+      - name: Build pinned server
+        run: |
+          make -f m11-pinned-llama-server.mk m11-fetch
+          make -f m11-pinned-llama-server.mk m11-apply
+          make -f m11-pinned-llama-server.mk m11-build
+      - name: Run multi-GPU server workload
+        run: |
+          python3 integrations/llama.cpp/distributed/run_distributed_workload.py \
+            --server build/m11-pinned-llama-server/llama.cpp/build/bin/llama-server \
+            --model '${{ inputs.model_path }}' \
+            --devices '${{ inputs.devices }}' \
+            --output build/m14/evidence
+      - name: Inject device failure
+        run: python3 integrations/llama.cpp/distributed/run_failure_injection.py --evidence build/m14/evidence
+      - name: Validate distributed evidence
+        run: python3 integrations/llama.cpp/distributed/validate_distributed_evidence.py build/m14/evidence/distributed-evidence.json
+      - name: Upload proof bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m14-distributed-multigpu-proof
+          path: build/m14/evidence
