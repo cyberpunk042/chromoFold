@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "repository": "https://github.com/ggml-org/llama.cpp.git",
+    "commit": "76f46ad29d61fd8c1401e8221842934bf62a6064"
+  },
+  "required_files": [
+    "common/arg.cpp",
+    "examples/server/server.cpp",
+    "src/llama-context.cpp",
+    "src/llama-kv-cache.cpp",
+    "src/llama-graph.cpp"
+  ],
+  "anchors": [
+    {"file": "common/arg.cpp", "symbol": "common_params_context"},
+    {"file": "examples/server/server.cpp", "symbol": "server_context"},
+    {"file": "src/llama-context.cpp", "symbol": "llama_decode"},
+    {"file": "src/llama-kv-cache.cpp", "symbol": "llama_kv_cache_seq_cp"},
+    {"file": "src/llama-kv-cache.cpp", "symbol": "llama_kv_cache_seq_rm"},
+    {"file": "src/llama-graph.cpp", "symbol": "build_attn"}
+  ],
+  "required_cli_options": [
+    "--kv-cache-backend",
+    "--chromofold-page-size",
+    "--chromofold-block-size",
+    "--chromofold-context-window",
+    "--chromofold-stats",
+    "--chromofold-evidence",
+    "--chromofold-strict"
+  ],
+  "strict_invariants": {
+    "dense_fallback_forbidden": true,
+    "exact_pin_required": true,
+    "patch_idempotent": true,
+    "shutdown_audit_required": true
+  }
+}

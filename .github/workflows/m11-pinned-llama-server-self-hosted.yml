@@ -1,0 +1,86 @@
+name: M11 pinned llama-server self-hosted proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_path:
+        description: Runner-local GGUF path
+        required: true
+      cuda_arch:
+        description: CUDA architecture without sm_ prefix
+        required: true
+        default: '80'
+      server_port:
+        description: Local test server port
+        required: true
+        default: '8080'
+
+permissions:
+  contents: read
+
+jobs:
+  production-proof:
+    runs-on: [self-hosted, linux, x64, nvidia]
+    timeout-minutes: 180
+    env:
+      MODEL: ${{ inputs.model_path }}
+      CUDA_ARCH: ${{ inputs.cuda_arch }}
+      PORT: ${{ inputs.server_port }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify NVIDIA runtime
+        run: |
+          nvidia-smi
+          nvcc --version
+          test -f "$MODEL"
+      - name: Fetch and patch exact llama.cpp pin
+        run: |
+          make -f m11-pinned-llama-server.mk m11-idempotency
+          make -f m9-llama-runtime.mk llama-runtime-apply
+          make -f m9-llama-graph.mk llama-graph-apply
+      - name: Build pinned server with ChromoFold
+        run: |
+          cmake -S build/llama.cpp-m11 -B build/llama.cpp-m11/build \
+            -DGGML_CUDA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON \
+            -DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCH" \
+            -DCHROMOFOLD_ROOT="$GITHUB_WORKSPACE"
+          cmake --build build/llama.cpp-m11/build --target llama-server -j"$(nproc)"
+      - name: Run reduced Compute Sanitizer contracts
+        run: |
+          make -f m10-cuda-sequence-resolver.mk cuda-resolver-compile CUDA_ARCH="$CUDA_ARCH"
+          for tool in memcheck racecheck initcheck synccheck; do
+            compute-sanitizer --tool "$tool" build/m10-cuda-sequence-resolver/m10_cuda_sequence_resolver_contract \
+              2>&1 | tee "build/m11-${tool}.log"
+          done
+      - name: Start pinned server
+        run: |
+          mkdir -p build/m11-production
+          build/llama.cpp-m11/build/bin/llama-server \
+            -m "$MODEL" --host 127.0.0.1 --port "$PORT" --ctx-size 8192 --parallel 4 \
+            --kv-cache-backend chromofold --chromofold-page-size 64 \
+            --chromofold-block-size 32 --chromofold-strict \
+            --chromofold-evidence build/m11-production/evidence.json \
+            >build/m11-production/server.log 2>&1 &
+          echo $! > build/m11-production/server.pid
+          for i in $(seq 1 60); do curl -fsS "http://127.0.0.1:$PORT/health" && exit 0; sleep 1; done
+          cat build/m11-production/server.log
+          exit 1
+      - name: Run concurrent HTTP workload
+        run: |
+          python integrations/llama.cpp/server/run_production_workload.py \
+            --server "http://127.0.0.1:$PORT" \
+            --output build/m11-production/workload.json
+      - name: Graceful shutdown and evidence validation
+        if: always()
+        run: |
+          if test -f build/m11-production/server.pid; then kill -INT "$(cat build/m11-production/server.pid)" || true; fi
+          for i in $(seq 1 30); do ! kill -0 "$(cat build/m11-production/server.pid)" 2>/dev/null && break; sleep 1; done
+          python integrations/llama.cpp/server/validate_production_evidence.py build/m11-production/evidence.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: m11-pinned-server-production-proof
+          path: |
+            build/m11-production/**
+            build/m11-*.log
+            build/m11-patch-report*.json

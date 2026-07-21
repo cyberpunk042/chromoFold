@@ -1,0 +1,54 @@
+name: M11 pinned llama-server
+
+on:
+  pull_request:
+    paths:
+      - 'include/chromofold/llama_server_runtime.h'
+      - 'src/llama_server_runtime.cpp'
+      - 'integrations/llama.cpp/server/**'
+      - 'tests/m11_pinned_server_contract.cpp'
+      - 'm11-pinned-llama-server.mk'
+      - 'docs/m11-pinned-llama-server.md'
+      - '.github/workflows/m11-pinned-llama-server*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check jsonschema pyyaml
+      - name: Validate schemas and false-claim rejection
+        run: |
+          make -f m11-pinned-llama-server.mk m11-schema
+          make -f m11-pinned-llama-server.mk m11-false-evidence
+      - name: Verify integration anchors
+        run: make -f m11-pinned-llama-server.mk m11-anchor-check
+      - name: Validate exact-pin manifest
+        run: python integrations/llama.cpp/server/apply_pinned_server_patch.py --help
+      - name: Reject executable dense fallback seams
+        run: |
+          if grep -R -E 'fallback_to_dense|dispatch_dense|run_dense_fallback|use_dense_fallback' src/llama_server_runtime.cpp integrations/llama.cpp/server --include='*.cpp' --include='*.py'; then
+            echo 'Unexpected executable dense fallback path' >&2
+            exit 1
+          fi
+      - name: Validate workflow YAML
+        run: |
+          python - <<'PY'
+          import pathlib, yaml
+          for path in pathlib.Path('.github/workflows').glob('m11-pinned-llama-server*.yml'):
+              yaml.safe_load(path.read_text())
+              print(path)
+          PY
+      - name: Verify no model artifacts are committed
+        run: |
+          if find . -type f \( -name '*.gguf' -o -name '*.ggml' \) -not -path './.git/*' | grep -q .; then
+            echo 'Model artifact committed to repository' >&2
+            exit 1
+          fi
