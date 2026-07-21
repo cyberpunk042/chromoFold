@@ -1,0 +1,1 @@
+{"tenants":{"count":1,"quotas_enforced":false,"fairness_demonstrated":false},"scheduling":{},"resilience":{},"autoscaling":{},"isolation":{"cross_tenant_reuse_rejections":0,"cross_tenant_contamination":1,"dense_fallback_launches":1},"shutdown":{"active_refs":1,"usage_idempotent":false}}
