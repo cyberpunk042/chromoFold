@@ -21,8 +21,7 @@ m12-anchor-check:
 	grep -F 'running_max' src/cuda/production_attention.cu
 	grep -F 'unpack_int4' src/cuda/production_attention.cu
 	grep -F 'dense_fallback_launches' include/chromofold/production_attention.h
-	grep -F 'optimized_reference_passed' integrations/llama.cpp/performance/performance-evidence.schema.json
-	grep -F 'requests", "minimum": 1000' integrations/llama.cpp/performance/performance-evidence.schema.json
+	$(PYTHON) -c 'import json; p="integrations/llama.cpp/performance/performance-evidence.schema.json"; s=json.load(open(p)); assert s["properties"]["numerics"]["properties"]["optimized_reference_passed"]["const"] is True; assert s["properties"]["soak"]["properties"]["requests"]["minimum"] == 1000'
 
 m12-schema:
 	$(PYTHON) -m json.tool integrations/llama.cpp/performance/performance-evidence.schema.json >/dev/null
