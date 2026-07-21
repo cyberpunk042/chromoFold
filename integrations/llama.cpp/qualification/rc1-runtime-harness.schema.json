@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chromofold.dev/schema/rc1-runtime-harness-v1.json",
+  "title": "ChromoFold RC1 runtime harness evidence",
+  "type": "object",
+  "required": ["schema", "mode", "release_digest", "decision", "environment"],
+  "properties": {
+    "schema": {"const": "chromofold.rc1.runtime-evidence.v1"},
+    "mode": {"enum": ["smoke", "candidate", "stable"]},
+    "release_digest": {"type": "string", "minLength": 8},
+    "qualified_digest": {"type": "string"},
+    "promoted_digest": {"type": "string"},
+    "decision": {"enum": ["PASS", "FAIL", "INCOMPLETE"]},
+    "reason": {"type": "string"},
+    "environment": {"type": "object"},
+    "gpu": {
+      "type": "object",
+      "properties": {
+        "source": {"type": "string"},
+        "devices": {"type": "array"}
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "required": ["end_to_end_correlated", "prompt_content_leaks", "metrics_scraped", "mtls_observed", "audit_chain_verified"],
+      "properties": {
+        "end_to_end_correlated": {"type": "boolean"},
+        "prompt_content_leaks": {"type": "integer", "minimum": 0},
+        "metrics_scraped": {"type": "boolean"},
+        "mtls_observed": {"type": "boolean"},
+        "audit_chain_verified": {"type": "boolean"}
+      }
+    },
+    "quality": {
+      "type": "object",
+      "required": ["correctness_failures", "cuda_errors", "cross_tenant_contamination", "dense_fallback_launches", "ttft_p95_ms", "inter_token_p95_ms"],
+      "properties": {
+        "correctness_failures": {"type": "integer", "minimum": 0},
+        "cuda_errors": {"type": "integer", "minimum": 0},
+        "cross_tenant_contamination": {"type": "integer", "minimum": 0},
+        "dense_fallback_launches": {"type": "integer", "minimum": 0},
+        "ttft_p95_ms": {"type": "number", "minimum": 0},
+        "inter_token_p95_ms": {"type": "number", "minimum": 0}
+      }
+    },
+    "memory": {"type": "object"},
+    "references": {"type": "object"},
+    "scenarios": {"type": "object"},
+    "scenario_execution_complete": {"type": "boolean"},
+    "scenario_success": {"type": "boolean"},
+    "incident_bundle_redacted": {"type": "boolean"}
+  },
+  "additionalProperties": true
+}
