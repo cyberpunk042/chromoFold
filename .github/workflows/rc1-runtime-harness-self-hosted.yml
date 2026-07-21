@@ -1,0 +1,78 @@
+name: RC1 runtime harness hardware qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Qualification duration and strictness
+        required: true
+        type: choice
+        options: [smoke, candidate, stable]
+        default: smoke
+      runner_label:
+        description: Additional self-hosted runner label
+        required: true
+        default: gpu
+      runtime_endpoint:
+        description: Existing runtime endpoint, or leave default when using CHROMOFOLD_RUNTIME_COMMAND
+        required: true
+        default: http://127.0.0.1:8080
+      metrics_endpoint:
+        description: Prometheus metrics endpoint
+        required: true
+        default: http://127.0.0.1:8080/metrics
+      model_path:
+        description: Model path on the self-hosted runner
+        required: true
+      release_digest:
+        description: Immutable qualified release digest
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: [self-hosted, "${{ inputs.runner_label }}"]
+    timeout-minutes: 1500
+    env:
+      CHROMOFOLD_RUNTIME_COMMAND: ${{ secrets.CHROMOFOLD_RUNTIME_COMMAND }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install qualification dependencies
+        run: pip install jsonschema nvidia-ml-py
+      - name: Verify NVIDIA hardware
+        run: |
+          command -v nvidia-smi
+          nvidia-smi -L
+      - name: Run runtime qualification harness
+        id: harness
+        continue-on-error: true
+        run: |
+          mkdir -p qualification
+          python tools/chromofold_runtime_harness.py \
+            --mode '${{ inputs.mode }}' \
+            --runtime-endpoint '${{ inputs.runtime_endpoint }}' \
+            --metrics-endpoint '${{ inputs.metrics_endpoint }}' \
+            --model '${{ inputs.model_path }}' \
+            --release-digest '${{ inputs.release_digest }}' \
+            --artifact qualification/rc1-runtime-evidence.json \
+            --incident-bundle qualification/rc1-incident.tar.gz
+      - name: Validate evidence structure and semantics
+        run: python integrations/llama.cpp/qualification/validate_rc1_runtime_evidence.py qualification/rc1-runtime-evidence.json
+      - name: Evaluate RC1 decision
+        run: python tools/chromofold_qualify.py evaluate qualification/rc1-runtime-evidence.json
+      - name: Upload qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc1-runtime-${{ inputs.mode }}-${{ github.sha }}
+          path: qualification/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Enforce harness result
+        if: steps.harness.outcome != 'success'
+        run: exit 1
