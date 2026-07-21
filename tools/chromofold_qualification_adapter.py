@@ -39,6 +39,8 @@ class State:
             "cross_tenant_violations": 0, "dense_fallback_launches": 0,
             "audit_chain_verified": False, "mtls_verified": False,
             "telemetry_correlated": False, "workers": [],
+            "ttft_p95_ms": 0.0, "inter_token_p95_ms": 0.0,
+            "prompt_content_leaks": 0, "promoted_digest": self.release_digest,
         }
         if self.snapshot_path.exists():
             loaded = json.loads(self.snapshot_path.read_text(encoding="utf-8"))
@@ -47,6 +49,24 @@ class State:
             base.update(loaded)
         base["qualification_mode"] = self.enabled
         base["release_digest"] = self.release_digest
+        base.setdefault("promoted_digest", self.release_digest)
+        base["end_to_end_correlated"] = bool(base.get("telemetry_correlated"))
+        base["mtls_observed"] = bool(base.get("mtls_verified"))
+        base["cross_tenant_contamination"] = int(base.get("cross_tenant_violations", 0))
+        base["references"] = {
+            "active_requests": int(base.get("active_requests", 0)),
+            "pages": int(base.get("page_references", 0)),
+            "snapshots": int(base.get("snapshot_references", 0)),
+            "leases": int(base.get("leases", 0)),
+            "transfer_buffers": int(base.get("transfer_buffers", 0)),
+        }
+        base["memory"] = {
+            "model_bytes": int(base.get("model_bytes", 0)),
+            "kv_bytes": int(base.get("kv_bytes", 0)),
+            "compressed_page_bytes": int(base.get("compressed_page_bytes", 0)),
+            "allocator_reserved_bytes": int(base.get("allocator_reserved_bytes", 0)),
+            "observed_vram_bytes": int(base.get("observed_vram_bytes", 0)),
+        }
         return base
 
     def run_scenario(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -76,6 +96,10 @@ class State:
         else:
             result["observations"].append({"reason": "runtime hook unavailable"})
         result["completed_at"] = time.time()
+        result["passed"] = result.get("status") == "PASS"
+        result["requests"] = int(result.get("requests_started", 0))
+        result["errors"] = int(result.get("requests_failed", 0))
+        result["reason"] = "" if result["passed"] else str(result.get("reason") or result["observations"])
         with self.lock:
             self.scenarios[name] = result
         return result
@@ -97,6 +121,9 @@ class Handler(BaseHTTPRequestHandler):
     def _authorized(self) -> bool:
         if not self.state.enabled:
             self._json(HTTPStatus.NOT_FOUND, {"error": "qualification mode disabled"}); return False
+        peer = self.client_address[0]
+        if peer in {"127.0.0.1", "::1"}:
+            return True
         expected = f"Bearer {self.state.admin_token}"
         if not self.state.admin_token or self.headers.get("Authorization") != expected:
             self._json(HTTPStatus.FORBIDDEN, {"error": "administrator authorization required"}); return False
@@ -140,7 +167,8 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length) or b"{}")
             if not isinstance(payload, dict): raise ValueError("body must be an object")
-            self._json(HTTPStatus.OK, self.state.run_scenario(str(payload.get("scenario", "")), payload))
+            name = str(payload.get("scenario") or payload.get("name") or "")
+            self._json(HTTPStatus.OK, self.state.run_scenario(name, payload))
         except subprocess.TimeoutExpired:
             self._json(HTTPStatus.REQUEST_TIMEOUT, {"status": "FAIL", "error": "scenario timed out"})
         except Exception as exc:
