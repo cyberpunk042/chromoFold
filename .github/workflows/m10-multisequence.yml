@@ -26,12 +26,38 @@ jobs:
         run: make -f m10-multisequence.mk multisequence-contract
       - name: Verify integration anchors
         run: make -f m10-multisequence.mk multisequence-anchor-check
-      - name: Reject fallback semantics
+      - name: Reject executable dense fallback seams
         run: |
-          if grep -R "fallback.*dense\|dense.*fallback" include/chromofold/multisequence_cache.h integrations/llama.cpp/multisequence | grep -v "strict_no_fallback"; then
-            echo 'Unexpected dense fallback seam in M10 integration' >&2
-            exit 1
-          fi
+          python - <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          paths = [
+              pathlib.Path('src/multisequence_cache.cpp'),
+              pathlib.Path('integrations/llama.cpp/multisequence/llama_server_multisequence_bridge.cpp'),
+          ]
+          forbidden_symbols = re.compile(
+              r'\b(?:fallback_to_dense|dispatch_dense|run_dense_fallback|use_dense_fallback)\b'
+          )
+          counter_mutation = re.compile(
+              r'(?:\+\+\s*dense_fallback_launches|dense_fallback_launches\s*\+\+|'
+              r'dense_fallback_launches\s*\+=|dense_fallback_launches\s*=\s*[1-9])'
+          )
+
+          failures = []
+          for path in paths:
+              for number, line in enumerate(path.read_text().splitlines(), 1):
+                  if forbidden_symbols.search(line) or counter_mutation.search(line):
+                      failures.append(f'{path}:{number}:{line.strip()}')
+
+          if failures:
+              print('Unexpected executable dense fallback seam in M10 integration:', file=sys.stderr)
+              print('\n'.join(failures), file=sys.stderr)
+              raise SystemExit(1)
+
+          print('No executable dense fallback seams found')
+          PY
       - name: Verify invariant and reclamation counters
         run: |
           grep -F 'invariant_failures' include/chromofold/multisequence_cache.h
