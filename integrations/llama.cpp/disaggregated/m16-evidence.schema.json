@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChromoFold M16 disaggregated serving evidence",
+  "type": "object",
+  "required": ["cluster", "model", "transfer", "cache", "leases", "recovery", "security", "isolation", "shutdown"],
+  "properties": {
+    "cluster": {"type": "object", "required": ["router", "prefill_workers", "decode_workers", "separate_processes"], "properties": {"router": {"const": 1}, "prefill_workers": {"type": "integer", "minimum": 1}, "decode_workers": {"type": "integer", "minimum": 2}, "separate_processes": {"const": true}}},
+    "model": {"type": "object", "required": ["gguf_sha256", "tokenizer_sha256", "codec_version"]},
+    "transfer": {"type": "object", "required": ["compressed_pages", "bytes", "completed", "partial_rejected", "received_without_prefill_recompute"], "properties": {"compressed_pages": {"type": "integer", "minimum": 1}, "bytes": {"type": "integer", "minimum": 1}, "completed": {"type": "integer", "minimum": 1}, "partial_rejected": {"type": "integer", "minimum": 1}, "received_without_prefill_recompute": {"const": true}}},
+    "cache": {"type": "object", "required": ["prefix_hits", "prefill_tokens_avoided"], "properties": {"prefix_hits": {"type": "integer", "minimum": 1}, "prefill_tokens_avoided": {"type": "integer", "minimum": 1}}},
+    "leases": {"type": "object", "required": ["acquired", "transferred", "stale_rejected"], "properties": {"acquired": {"type": "integer", "minimum": 1}, "transferred": {"type": "integer", "minimum": 1}, "stale_rejected": {"type": "integer", "minimum": 1}}},
+    "recovery": {"type": "object", "required": ["worker_failure_injected", "replica_recovery_succeeded"], "properties": {"worker_failure_injected": {"const": true}, "replica_recovery_succeeded": {"const": true}}},
+    "security": {"type": "object", "required": ["worker_authentication", "manifest_integrity", "replay_rejected"], "properties": {"worker_authentication": {"const": true}, "manifest_integrity": {"const": true}, "replay_rejected": {"const": true}}},
+    "isolation": {"type": "object", "required": ["cross_request_contamination", "dense_fallback_launches", "cuda_errors"], "properties": {"cross_request_contamination": {"const": 0}, "dense_fallback_launches": {"const": 0}, "cuda_errors": {"const": 0}}},
+    "shutdown": {"type": "object", "required": ["audit_passed", "page_refs", "snapshot_refs"], "properties": {"audit_passed": {"const": true}, "page_refs": {"const": 0}, "snapshot_refs": {"const": 0}}}
+  }
+}
