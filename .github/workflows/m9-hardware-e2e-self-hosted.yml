@@ -1,0 +1,91 @@
+name: M9 hardware E2E self-hosted
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_path:
+        description: Absolute runner-local path to a compatible GGUF
+        required: true
+        type: string
+      prompt_path:
+        description: Repository-relative prompt path
+        required: false
+        default: integrations/llama.cpp/e2e/prompts/long-context.txt
+        type: string
+      cuda_arch:
+        description: CUDA architecture without decimal, for example 80 or 89
+        required: false
+        default: '80'
+        type: string
+      contexts:
+        description: Comma-separated capacity sweep contexts
+        required: false
+        default: 4096,8192,16384,32768,65536
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  ARTIFACT_DIR: build/m9-hardware-e2e
+  MODEL: ${{ inputs.model_path }}
+  PROMPT: ${{ inputs.prompt_path }}
+  CUDA_ARCH: ${{ inputs.cuda_arch }}
+  CONTEXTS: ${{ inputs.contexts }}
+
+jobs:
+  prove:
+    runs-on: [self-hosted, linux, x64, nvidia]
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify NVIDIA runner
+        run: |
+          nvidia-smi
+          nvcc --version
+          compute-sanitizer --version
+          test -r "$MODEL"
+      - name: Install evidence dependencies
+        run: python -m pip install --disable-pip-version-check jsonschema
+      - name: Fetch and verify pinned llama.cpp
+        run: make -f m9-llama-e2e.mk llama-fetch
+      - name: Apply runtime and graph integrations
+        run: |
+          make -f m9-llama-runtime.mk llama-runtime-apply
+          make -f m9-llama-graph.mk llama-graph-apply
+      - name: Build pinned llama.cpp hardware binary
+        run: make -f m9-hardware-e2e.mk hardware-proof-build CUDA_ARCH="$CUDA_ARCH"
+      - name: Run CUDA transactional fixtures under memcheck
+        run: compute-sanitizer --tool memcheck make -f m9-gpu-seal-attention.mk gpu-seal-contract CUDA_ARCH="$CUDA_ARCH"
+      - name: Run CUDA transactional fixtures under racecheck
+        run: compute-sanitizer --tool racecheck make -f m9-gpu-seal-attention.mk gpu-seal-contract CUDA_ARCH="$CUDA_ARCH"
+      - name: Run CUDA transactional fixtures under initcheck
+        run: compute-sanitizer --tool initcheck make -f m9-gpu-seal-attention.mk gpu-seal-contract CUDA_ARCH="$CUDA_ARCH"
+      - name: Run CUDA transactional fixtures under synccheck
+        run: compute-sanitizer --tool synccheck make -f m9-gpu-seal-attention.mk gpu-seal-contract CUDA_ARCH="$CUDA_ARCH"
+      - name: Run paired dense and ChromoFold inference
+        run: make -f m9-hardware-e2e.mk hardware-proof-pair MODEL="$MODEL" PROMPT="$PROMPT" CUDA_ARCH="$CUDA_ARCH"
+      - name: Run context-capacity sweep
+        run: make -f m9-hardware-e2e.mk hardware-proof-capacity MODEL="$MODEL" PROMPT="$PROMPT" CUDA_ARCH="$CUDA_ARCH" CONTEXTS="$CONTEXTS"
+      - name: Assemble evidence bundle
+        run: |
+          python integrations/llama.cpp/e2e/assemble_hardware_evidence.py \
+            --pair "$ARTIFACT_DIR/pair/pair-summary.json" \
+            --comparison "$ARTIFACT_DIR/pair/comparison.json" \
+            --runtime "$ARTIFACT_DIR/pair/chromofold/runtime-evidence.json" \
+            --capacity "$ARTIFACT_DIR/capacity.json" \
+            --model "$MODEL" \
+            --output "$ARTIFACT_DIR/evidence.json"
+      - name: Validate strict hardware evidence
+        run: make -f m9-hardware-e2e.mk hardware-proof-validate
+      - name: Upload reproducibility bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m9-hardware-e2e-${{ github.sha }}
+          path: build/m9-hardware-e2e
+          if-no-files-found: error
+          retention-days: 30
