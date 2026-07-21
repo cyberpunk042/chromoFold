@@ -1,0 +1,36 @@
+name: M14 distributed multi-GPU
+
+on:
+  pull_request:
+    paths:
+      - 'include/chromofold/distributed_runtime.h'
+      - 'src/distributed_runtime.cpp'
+      - 'tests/m14_distributed_runtime_contract.cpp'
+      - 'integrations/llama.cpp/distributed/**'
+      - 'm14-distributed-multigpu.mk'
+      - 'docs/m14-distributed-multigpu.md'
+      - '.github/workflows/m14-distributed-multigpu*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run distributed contract
+        run: make -f m14-distributed-multigpu.mk m14-contract
+      - name: Validate schema and scripts
+        run: make -f m14-distributed-multigpu.mk m14-schema
+      - name: Verify semantic anchors
+        run: make -f m14-distributed-multigpu.mk m14-anchor-check
+      - name: Reject fabricated evidence
+        run: make -f m14-distributed-multigpu.mk m14-false-evidence
+      - name: Reject dense fallback seams
+        run: |
+          if grep -R -E 'fallback_to_dense|dispatch_dense|run_dense_fallback' src/distributed_runtime.cpp; then
+            echo 'Unexpected dense fallback implementation in M14' >&2
+            exit 1
+          fi
