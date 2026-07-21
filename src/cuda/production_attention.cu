@@ -4,21 +4,17 @@
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
 
-#include <algorithm>
-#include <cmath>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 namespace {
 
 struct GraphEntry {
     cudaGraph_t graph = nullptr;
     cudaGraphExec_t exec = nullptr;
-    uint64_t signature = 0;
 };
 
 __device__ inline float load_scalar(const void * base, uint32_t type, uint64_t offset) {
@@ -47,6 +43,19 @@ __device__ inline float unpack_int4(const uint8_t * payload, uint64_t index, flo
     return static_cast<float>(value) * scale;
 }
 
+__device__ inline void update_online(float score,
+                                     float value,
+                                     float & running_max,
+                                     float & running_denom,
+                                     float & accumulator) {
+    const float next_max = fmaxf(running_max, score);
+    const float old_scale = isfinite(running_max) ? expf(running_max - next_max) : 0.0f;
+    const float weight = expf(score - next_max);
+    accumulator = accumulator * old_scale + weight * value;
+    running_denom = running_denom * old_scale + weight;
+    running_max = next_max;
+}
+
 __global__ void optimized_decode_kernel(const cf_attention_batch_item * items,
                                         uint32_t item_count,
                                         uint32_t query_heads,
@@ -62,66 +71,35 @@ __global__ void optimized_decode_kernel(const cf_attention_batch_item * items,
     const uint32_t kv_head = query_head / gqa_group_size;
     float running_max = -CUDART_INF_F;
     float running_denom = 0.0f;
-
-    extern __shared__ float shared[];
-    float * output_accumulator = shared;
+    extern __shared__ float output_accumulator[];
     for (uint32_t d = lane; d < head_dim; d += 32u) output_accumulator[d] = 0.0f;
     __syncwarp();
 
-    auto consume_dense = [&](const float * keys, const float * values, uint32_t token_begin, uint32_t token_count) {
-        for (uint32_t token = 0; token < token_count; ++token) {
-            const uint32_t absolute = token_begin + token;
-            if (item.causal_window && absolute + item.causal_window < item.query_token_begin) continue;
-            float dot = 0.0f;
-            for (uint32_t d = lane; d < head_dim; d += 32u) {
-                const uint64_t qoff = item.query.token_stride_bytes * 0 + item.query.head_stride_bytes * query_head + item.query.element_stride_bytes * d;
-                const float q = load_scalar(item.query.data, item.query.type, qoff);
-                const uint64_t index = (static_cast<uint64_t>(token) * kv_heads + kv_head) * head_dim + d;
-                dot += q * keys[index];
-            }
-            dot = warp_sum(dot);
-            dot = __shfl_sync(0xffffffffu, dot, 0) * item.softmax_scale;
-            const float next_max = fmaxf(running_max, dot);
-            const float old_scale = isfinite(running_max) ? expf(running_max - next_max) : 0.0f;
-            const float weight = expf(dot - next_max);
-            const float next_denom = running_denom * old_scale + weight;
-            for (uint32_t d = lane; d < head_dim; d += 32u) {
-                const uint64_t index = (static_cast<uint64_t>(token) * kv_heads + kv_head) * head_dim + d;
-                output_accumulator[d] = output_accumulator[d] * old_scale + weight * values[index];
-            }
-            running_max = next_max;
-            running_denom = next_denom;
-        }
-    };
-
     for (uint32_t page_index = 0; page_index < item.sealed_page_count; ++page_index) {
         const cf_device_page_descriptor page = item.sealed_pages[page_index];
-        if (!page.keys || !page.values || !page.key_scales || !page.value_scales) continue;
-        const uint8_t * packed_k = static_cast<const uint8_t *>(page.keys);
-        const uint8_t * packed_v = static_cast<const uint8_t *>(page.values);
-        const float * key_scales = static_cast<const float *>(page.key_scales);
-        const float * value_scales = static_cast<const float *>(page.value_scales);
+        if (!page.key_payload || !page.value_payload || !page.key_scales || !page.value_scales) continue;
+        const uint32_t blocks_per_head = (page.head_dim + page.block_size - 1u) / page.block_size;
         for (uint32_t token = 0; token < page.token_count; ++token) {
             const uint32_t absolute = page.token_begin + token;
             if (item.causal_window && absolute + item.causal_window < item.query_token_begin) continue;
             float dot = 0.0f;
             for (uint32_t d = lane; d < head_dim; d += 32u) {
                 const uint64_t qoff = item.query.head_stride_bytes * query_head + item.query.element_stride_bytes * d;
-                const float q = load_scalar(item.query.data, item.query.type, qoff);
+                const float query_value = load_scalar(item.query.data, item.query.scalar_type, qoff);
                 const uint64_t index = (static_cast<uint64_t>(token) * kv_heads + kv_head) * head_dim + d;
-                const float scale = key_scales[(static_cast<uint64_t>(token) * kv_heads + kv_head) * page.blocks_per_head + d / page.block_size];
-                dot += q * unpack_int4(packed_k, index, scale);
+                const uint64_t scale_index = (static_cast<uint64_t>(token) * kv_heads + kv_head) * blocks_per_head + d / page.block_size;
+                dot += query_value * unpack_int4(page.key_payload, index, page.key_scales[scale_index]);
             }
-            dot = warp_sum(dot);
-            dot = __shfl_sync(0xffffffffu, dot, 0) * item.softmax_scale;
-            const float next_max = fmaxf(running_max, dot);
-            const float old_scale = isfinite(running_max) ? expf(running_max - next_max) : 0.0f;
+            dot = __shfl_sync(0xffffffffu, warp_sum(dot), 0) * item.softmax_scale;
+            const float previous_max = running_max;
+            const float next_max = fmaxf(previous_max, dot);
+            const float old_scale = isfinite(previous_max) ? expf(previous_max - next_max) : 0.0f;
             const float weight = expf(dot - next_max);
             const float next_denom = running_denom * old_scale + weight;
             for (uint32_t d = lane; d < head_dim; d += 32u) {
                 const uint64_t index = (static_cast<uint64_t>(token) * kv_heads + kv_head) * head_dim + d;
-                const float scale = value_scales[(static_cast<uint64_t>(token) * kv_heads + kv_head) * page.blocks_per_head + d / page.block_size];
-                const float value = unpack_int4(packed_v, index, scale);
+                const uint64_t scale_index = (static_cast<uint64_t>(token) * kv_heads + kv_head) * blocks_per_head + d / page.block_size;
+                const float value = unpack_int4(page.value_payload, index, page.value_scales[scale_index]);
                 output_accumulator[d] = output_accumulator[d] * old_scale + weight * value;
             }
             running_max = next_max;
@@ -129,25 +107,35 @@ __global__ void optimized_decode_kernel(const cf_attention_batch_item * items,
         }
     }
 
-    if (item.active_token_count) consume_dense(item.active_keys, item.active_values, item.active_token_begin, item.active_token_count);
+    for (uint32_t token = 0; token < item.active_token_count; ++token) {
+        const uint32_t absolute = item.active_token_begin + token;
+        if (item.causal_window && absolute + item.causal_window < item.query_token_begin) continue;
+        float dot = 0.0f;
+        for (uint32_t d = lane; d < head_dim; d += 32u) {
+            const uint64_t qoff = item.query.head_stride_bytes * query_head + item.query.element_stride_bytes * d;
+            const float query_value = load_scalar(item.query.data, item.query.scalar_type, qoff);
+            const uint64_t index = (static_cast<uint64_t>(token) * kv_heads + kv_head) * head_dim + d;
+            dot += query_value * item.active_keys[index];
+        }
+        dot = __shfl_sync(0xffffffffu, warp_sum(dot), 0) * item.softmax_scale;
+        const float previous_max = running_max;
+        const float next_max = fmaxf(previous_max, dot);
+        const float old_scale = isfinite(previous_max) ? expf(previous_max - next_max) : 0.0f;
+        const float weight = expf(dot - next_max);
+        const float next_denom = running_denom * old_scale + weight;
+        for (uint32_t d = lane; d < head_dim; d += 32u) {
+            const uint64_t index = (static_cast<uint64_t>(token) * kv_heads + kv_head) * head_dim + d;
+            output_accumulator[d] = output_accumulator[d] * old_scale + weight * item.active_values[index];
+        }
+        running_max = next_max;
+        running_denom = next_denom;
+    }
 
     const float inverse = running_denom > 0.0f ? 1.0f / running_denom : 0.0f;
     for (uint32_t d = lane; d < head_dim; d += 32u) {
         const uint64_t offset = item.output_head_stride_bytes * query_head + item.output_element_stride_bytes * d;
         store_scalar(item.output, item.output_type, offset, output_accumulator[d] * inverse);
     }
-}
-
-uint64_t signature_for(const cf_attention_batch_item * items, uint32_t count, const cf_attention_runtime_config & config) {
-    uint64_t value = 1469598103934665603ull;
-    value ^= count; value *= 1099511628211ull;
-    value ^= config.head_dim; value *= 1099511628211ull;
-    value ^= config.query_head_count; value *= 1099511628211ull;
-    for (uint32_t i = 0; i < count; ++i) {
-        value ^= items[i].sealed_page_count; value *= 1099511628211ull;
-        value ^= items[i].active_token_count; value *= 1099511628211ull;
-    }
-    return value;
 }
 
 } // namespace
@@ -188,7 +176,7 @@ extern "C" int cf_attention_execute_async(cf_attention_runtime * runtime,
     std::lock_guard<std::mutex> guard(runtime->mutex);
     try {
         if (runtime->config.mode == CF_ATTENTION_REFERENCE) {
-            runtime->error = "reference execution is provided by the M9 correctness kernel";
+            runtime->error = "reference execution is delegated to the M9 correctness kernel";
             ++runtime->counters.reference_launches;
             return -1;
         }
@@ -199,9 +187,8 @@ extern "C" int cf_attention_execute_async(cf_attention_runtime * runtime,
         ++runtime->counters.allocation_count;
         error = cudaMemcpyAsync(device_items, items, bytes, cudaMemcpyHostToDevice, stream);
         if (error != cudaSuccess) throw std::runtime_error(cudaGetErrorString(error));
-        dim3 grid(item_count, runtime->config.query_head_count, 1);
-        dim3 block(32, 1, 1);
-        optimized_decode_kernel<<<grid, block, runtime->config.head_dim * sizeof(float), stream>>>(
+        optimized_decode_kernel<<<dim3(item_count, runtime->config.query_head_count, 1), 32,
+                                  runtime->config.head_dim * sizeof(float), stream>>>(
             device_items, item_count, runtime->config.query_head_count, runtime->config.kv_head_count,
             runtime->config.head_dim, runtime->config.gqa_group_size);
         error = cudaGetLastError();
@@ -231,7 +218,7 @@ extern "C" int cf_attention_compare_async(cf_attention_runtime * runtime,
                                              void *) {
     if (!runtime || !item_count || max_abs_error <= 0.0f || mean_abs_error <= 0.0f) return -1;
     std::lock_guard<std::mutex> guard(runtime->mutex);
-    runtime->error = "comparison requires reference and optimized output buffers from the hardware harness";
+    runtime->error = "comparison requires reference and optimized buffers from the hardware harness";
     return -1;
 }
 
