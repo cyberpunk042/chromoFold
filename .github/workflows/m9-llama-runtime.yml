@@ -1,0 +1,48 @@
+name: M9 llama runtime
+
+on:
+  pull_request:
+    paths:
+      - "integrations/llama.cpp/runtime/**"
+      - "integrations/llama.cpp/chromofold_runtime_bridge.*"
+      - "m9-llama-runtime.mk"
+      - ".github/workflows/m9-llama-runtime.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-contract:
+    runs-on: ubuntu-latest
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+            build-essential ca-certificates cmake git python3
+      - name: Prepare pinned llama.cpp checkout
+        run: python3 integrations/llama.cpp/e2e/fetch_and_prepare.py build/llama.cpp-pinned --reset
+      - name: Validate runtime patch applicability
+        run: make -f m9-llama-runtime.mk llama-runtime-check
+      - name: Apply runtime patch twice to prove idempotence
+        run: |
+          make -f m9-llama-runtime.mk llama-runtime-apply
+          make -f m9-llama-runtime.mk llama-runtime-apply
+      - name: Verify generated patch state
+        run: make -f m9-llama-runtime.mk llama-runtime-verify
+      - name: Compile runtime bridge
+        run: make -f m9-llama-runtime.mk llama-runtime-compile
+      - name: Reject ChromoFold without CUDA
+        run: |
+          set +e
+          cmake -S build/llama.cpp-pinned -B build/no-cuda -DGGML_CHROMOFOLD=ON -DGGML_CUDA=OFF > build/no-cuda.log 2>&1
+          status=$?
+          cat build/no-cuda.log
+          test "$status" -ne 0
+          grep -q "GGML_CHROMOFOLD requires GGML_CUDA" build/no-cuda.log
