@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _hooklib import *  # noqa: F401,F403
+"""decode-worker-failure: terminate a real decode worker, observe impact, restore capacity, measure recovery.
+Commands: CHROMOFOLD_HOOK_KILL_DECODE_WORKER_CMD (+ optional CHROMOFOLD_HOOK_RESTORE_DECODE_WORKER_CMD)."""
+t = Timer(); p = read_payload(); ep = guard_runtime(t, p)
+control_scenario(t, p, ep, "KILL_DECODE_WORKER", restore_action="RESTORE_DECODE_WORKER")

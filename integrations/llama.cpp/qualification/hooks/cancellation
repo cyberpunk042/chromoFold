@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _hooklib import *  # noqa: F401,F403
+"""cancellation: cancel active generations and verify resource/reference cleanup.
+Real cancel command: CHROMOFOLD_HOOK_CANCEL_CMD (else attempts nothing and reports INCOMPLETE)."""
+t = Timer(); p = read_payload(); ep = guard_runtime(t, p)
+before = snapshot(p)
+cancel = operator_cmd("CANCEL")
+if not cancel:
+    incomplete(t, "cancellation: set CHROMOFOLD_HOOK_CANCEL_CMD to start-and-cancel real generations")
+rc, log = run_cmd(cancel)
+if rc != 0:
+    fail(t, "cancellation: cancel command failed", observations=[{"cmd_rc": rc, "log": log[:400]}])
+recon, why = references_reconciled(before, snapshot(p))
+if not recon:
+    fail(t, f"cancellation: resources/references NOT cleaned up after cancel — {why}")
+emit("PASS", t, references_reconciled=recon, observations=[{"operation": "cancelled-and-cleaned", "reconcile": why}])

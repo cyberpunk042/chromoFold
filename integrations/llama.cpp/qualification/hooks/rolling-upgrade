@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _hooklib import *  # noqa: F401,F403
+"""rolling-upgrade: introduce the candidate digest, shift traffic, drain old workers, reconcile state.
+Command: CHROMOFOLD_HOOK_ROLLING_UPGRADE_CMD."""
+t = Timer(); p = read_payload(); ep = guard_runtime(t, p)
+control_scenario(t, p, ep, "ROLLING_UPGRADE")

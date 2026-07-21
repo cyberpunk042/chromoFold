@@ -1,0 +1,19 @@
+#!/usr/bin/env python3
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _hooklib import *  # noqa: F401,F403
+"""cache-warm: prime the cache, repeat the request set, verify hits and expected completion."""
+t = Timer(); p = read_payload(); ep = guard_runtime(t, p)
+before = snapshot(p)
+n = int(p.get("requests", 50))
+ps, pc, pf, _ = issue_requests(ep, n)          # prime
+if ps == 0:
+    incomplete(t, "cache-warm: no generation capability to prime the cache (set CHROMOFOLD_HOOK_GEN_CMD or a /v1/completions endpoint)")
+s, c, fl, detail = issue_requests(ep, n)        # measured repeat
+if fl > 0:
+    fail(t, f"cache-warm: {fl}/{s} requests failed on warm cache", requests_started=s, requests_completed=c, requests_failed=fl)
+recon, why = references_reconciled(before, snapshot(p))
+if not recon:
+    incomplete(t, f"cache-warm: served {c}/{s} but could not verify reference reconciliation — {why}")
+emit("PASS", t, requests_started=s, requests_completed=c, requests_failed=fl, references_reconciled=recon,
+     observations=[{"operation": "primed-then-repeated", "primed": pc, "detail": detail, "reconcile": why}])

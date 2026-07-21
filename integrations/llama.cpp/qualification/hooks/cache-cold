@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _hooklib import *  # noqa: F401,F403
+"""cache-cold: clear/bypass the runtime cache, run the request set, verify misses and normal completion.
+Real action command: CHROMOFOLD_HOOK_CLEAR_CACHE_CMD."""
+t = Timer(); p = read_payload(); ep = guard_runtime(t, p)
+before = snapshot(p)
+clear = operator_cmd("CLEAR_CACHE")
+if not clear:
+    incomplete(t, "cache-cold: set CHROMOFOLD_HOOK_CLEAR_CACHE_CMD to the real cache-clear/bypass command")
+rc, log = run_cmd(clear)
+if rc != 0:
+    fail(t, "cache-cold: cache-clear command failed", observations=[{"cmd_rc": rc, "log": log[:400]}])
+s, c, fl, detail = issue_requests(ep, int(p.get("requests", 50)))
+if s == 0:
+    incomplete(t, f"cache-cold: {detail}")
+if fl > 0:
+    fail(t, f"cache-cold: {fl}/{s} requests failed after cold cache", requests_started=s, requests_completed=c, requests_failed=fl)
+recon, why = references_reconciled(before, snapshot(p))
+if not recon:
+    incomplete(t, f"cache-cold: served {c}/{s} but could not verify reference reconciliation — {why}")
+emit("PASS", t, requests_started=s, requests_completed=c, requests_failed=fl, references_reconciled=recon,
+     observations=[{"operation": "cache-cleared-and-served", "detail": detail, "reconcile": why}])

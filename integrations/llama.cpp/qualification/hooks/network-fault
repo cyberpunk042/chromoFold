@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _hooklib import *  # noqa: F401,F403
+"""network-fault: inject a bounded delay/interruption, verify activation, remove it, measure recovery.
+Commands: CHROMOFOLD_HOOK_INJECT_NETWORK_FAULT_CMD (+ CHROMOFOLD_HOOK_CLEAR_NETWORK_FAULT_CMD)."""
+t = Timer(); p = read_payload(); ep = guard_runtime(t, p)
+control_scenario(t, p, ep, "INJECT_NETWORK_FAULT", restore_action="CLEAR_NETWORK_FAULT")
