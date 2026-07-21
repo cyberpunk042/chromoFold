@@ -31,26 +31,14 @@ class State:
 
     def snapshot(self) -> dict[str, Any]:
         base: dict[str, Any] = {
-            "qualification_mode": self.enabled,
-            "release_digest": self.release_digest,
-            "active_requests": 0,
-            "page_references": 0,
-            "snapshot_references": 0,
-            "leases": 0,
-            "transfer_buffers": 0,
-            "model_bytes": 0,
-            "kv_bytes": 0,
-            "compressed_page_bytes": 0,
-            "allocator_reserved_bytes": 0,
-            "observed_vram_bytes": 0,
-            "cuda_errors": 0,
-            "correctness_failures": 0,
-            "cross_tenant_violations": 0,
-            "dense_fallback_launches": 0,
-            "audit_chain_verified": False,
-            "mtls_verified": False,
-            "telemetry_correlated": False,
-            "workers": [],
+            "qualification_mode": self.enabled, "release_digest": self.release_digest,
+            "active_requests": 0, "page_references": 0, "snapshot_references": 0,
+            "leases": 0, "transfer_buffers": 0, "model_bytes": 0, "kv_bytes": 0,
+            "compressed_page_bytes": 0, "allocator_reserved_bytes": 0,
+            "observed_vram_bytes": 0, "cuda_errors": 0, "correctness_failures": 0,
+            "cross_tenant_violations": 0, "dense_fallback_launches": 0,
+            "audit_chain_verified": False, "mtls_verified": False,
+            "telemetry_correlated": False, "workers": [],
         }
         if self.snapshot_path.exists():
             loaded = json.loads(self.snapshot_path.read_text(encoding="utf-8"))
@@ -66,22 +54,16 @@ class State:
             raise ValueError(f"unsupported scenario: {name}")
         started = time.time()
         result: dict[str, Any] = {
-            "scenario": name,
-            "status": "INCOMPLETE",
-            "started_at": started,
-            "completed_at": started,
-            "requests_started": 0,
-            "requests_completed": 0,
-            "requests_failed": 0,
-            "recovery_ms": 0,
-            "references_reconciled": False,
+            "scenario": name, "status": "INCOMPLETE", "started_at": started,
+            "completed_at": started, "requests_started": 0, "requests_completed": 0,
+            "requests_failed": 0, "recovery_ms": 0, "references_reconciled": False,
             "observations": [],
         }
         hook = self.hooks_dir / name if self.hooks_dir else None
         if hook and hook.is_file() and os.access(hook, os.X_OK):
             proc = subprocess.run(
-                [str(hook)], input=json.dumps(payload), text=True,
-                capture_output=True, timeout=int(payload.get("timeout_seconds", 300)), check=False,
+                [str(hook)], input=json.dumps(payload), text=True, capture_output=True,
+                timeout=int(payload.get("timeout_seconds", 300)), check=False,
             )
             if proc.stdout.strip():
                 observed = json.loads(proc.stdout)
@@ -110,17 +92,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        self.end_headers(); self.wfile.write(data)
 
     def _authorized(self) -> bool:
         if not self.state.enabled:
-            self._json(HTTPStatus.NOT_FOUND, {"error": "qualification mode disabled"})
-            return False
+            self._json(HTTPStatus.NOT_FOUND, {"error": "qualification mode disabled"}); return False
         expected = f"Bearer {self.state.admin_token}"
         if not self.state.admin_token or self.headers.get("Authorization") != expected:
-            self._json(HTTPStatus.FORBIDDEN, {"error": "administrator authorization required"})
-            return False
+            self._json(HTTPStatus.FORBIDDEN, {"error": "administrator authorization required"}); return False
         return True
 
     def do_GET(self) -> None:  # noqa: N802
@@ -135,17 +114,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"ready": False, "error": str(exc)})
         elif self.path == "/qualification/snapshot":
             if self._authorized():
-                try:
-                    self._json(HTTPStatus.OK, self.state.snapshot())
-                except Exception as exc:
-                    self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+                try: self._json(HTTPStatus.OK, self.state.snapshot())
+                except Exception as exc: self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
         elif self.path == "/metrics":
             snap = self.state.snapshot()
             lines = [
-                f'chormofold_active_requests {int(snap.get("active_requests", 0))}',
-                f'chormofold_page_references {int(snap.get("page_references", 0))}',
-                f'chormofold_cuda_errors_total {int(snap.get("cuda_errors", 0))}',
-                f'chormofold_dense_fallback_launches_total {int(snap.get("dense_fallback_launches", 0))}',
+                f'chromofold_active_requests {int(snap.get("active_requests", 0))}',
+                f'chromofold_page_references {int(snap.get("page_references", 0))}',
+                f'chromofold_cuda_errors_total {int(snap.get("cuda_errors", 0))}',
+                f'chromofold_dense_fallback_launches_total {int(snap.get("dense_fallback_launches", 0))}',
             ]
             data = ("\n".join(lines) + "\n").encode()
             self.send_response(HTTPStatus.OK)
@@ -163,8 +140,7 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length) or b"{}")
             if not isinstance(payload, dict): raise ValueError("body must be an object")
-            name = str(payload.get("scenario", ""))
-            self._json(HTTPStatus.OK, self.state.run_scenario(name, payload))
+            self._json(HTTPStatus.OK, self.state.run_scenario(str(payload.get("scenario", "")), payload))
         except subprocess.TimeoutExpired:
             self._json(HTTPStatus.REQUEST_TIMEOUT, {"status": "FAIL", "error": "scenario timed out"})
         except Exception as exc:
@@ -181,9 +157,11 @@ def main() -> int:
     parser.add_argument("--release-digest", required=True)
     parser.add_argument("--hooks-dir", type=Path)
     args = parser.parse_args()
-    enabled = os.getenv("CHROMOFOLD_QUALIFICATION_MODE") == "1"
-    token = os.getenv("CHROMOFOLD_QUALIFICATION_ADMIN_TOKEN", "")
-    state = State(enabled, token, args.release_digest, args.snapshot, args.hooks_dir)
+    state = State(
+        os.getenv("CHROMOFOLD_QUALIFICATION_MODE") == "1",
+        os.getenv("CHROMOFOLD_QUALIFICATION_ADMIN_TOKEN", ""),
+        args.release_digest, args.snapshot, args.hooks_dir,
+    )
     server = ThreadingHTTPServer((args.listen, args.port), Handler)
     server.state = state  # type: ignore[attr-defined]
     server.serve_forever()
