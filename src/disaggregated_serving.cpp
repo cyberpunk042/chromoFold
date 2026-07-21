@@ -138,7 +138,12 @@ extern "C" int cf_cluster_transfer_lease(cf_cluster_runtime * runtime, const cf_
     std::lock_guard<std::mutex> guard(runtime->mutex); const auto key = page_key(*page_id); auto found = runtime->leases.find(key);
     if (found == runtime->leases.end() || found->second.generation != current->generation || std::memcmp(found->second.token, current->token, 32) != 0) { ++runtime->counters.stale_generation_rejections; return -1; }
     found->second.owner_worker_id = next_worker_id; ++found->second.generation; found->second.expires_at_millis = now_millis() + runtime->config.lease_duration_millis;
-    fill_token(found->second.token, key, next_worker_id, found->second.generation); *transferred = found->second; ++runtime->counters.lease_transfers; return 0;
+    fill_token(found->second.token, key, next_worker_id, found->second.generation);
+    auto manifest = runtime->pages.find(key);
+    if (manifest != runtime->pages.end()) {
+        manifest->second.lease = found->second;
+    }
+    *transferred = found->second; ++runtime->counters.lease_transfers; return 0;
 }
 
 extern "C" int cf_cluster_publish_manifest(cf_cluster_runtime * runtime, const cf_page_manifest * manifest) {
@@ -172,7 +177,10 @@ extern "C" int cf_cluster_mark_worker_failed(cf_cluster_runtime * runtime, uint6
 
     found->second.healthy = 0;
     for (const auto & page : runtime->pages) {
-        if (page.second.lease.owner_worker_id == worker_id && page.second.replica_count > 1) {
+        const auto lease = runtime->leases.find(page.first);
+        if (lease != runtime->leases.end() &&
+            lease->second.owner_worker_id == worker_id &&
+            page.second.replica_count > 1) {
             ++runtime->counters.replica_recoveries;
         }
     }
