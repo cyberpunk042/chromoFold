@@ -1,0 +1,29 @@
+name: M13 adaptive compression
+on:
+  pull_request:
+    paths:
+      - 'include/chromofold/adaptive_compression.h'
+      - 'include/chromofold/persistent_page_store.h'
+      - 'src/adaptive_compression.cpp'
+      - 'src/persistent_page_store.cpp'
+      - 'tools/chromofold_cache.cpp'
+      - 'tests/m13_adaptive_compression_contract.cpp'
+      - 'integrations/llama.cpp/adaptive/**'
+      - 'm13-adaptive-compression.mk'
+      - '.github/workflows/m13-adaptive-compression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: CPU codec and persistence contract
+        run: make -f m13-adaptive-compression.mk m13-contract
+      - name: Schema and validator
+        run: make -f m13-adaptive-compression.mk m13-schema
+      - name: Semantic anchors
+        run: make -f m13-adaptive-compression.mk m13-anchor-check
+      - name: Reject fabricated evidence
+        run: make -f m13-adaptive-compression.mk m13-false-evidence

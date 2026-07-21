@@ -1,0 +1,50 @@
+name: M13 adaptive compression self-hosted
+on:
+  workflow_dispatch:
+    inputs:
+      model_path:
+        description: Runner-local GGUF path
+        required: true
+      cache_path:
+        description: Persistent cache path
+        required: true
+        default: build/m13-hardware/cache.cfp
+permissions:
+  contents: read
+jobs:
+  hardware-proof:
+    runs-on: [self-hosted, linux, x64, nvidia]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build CPU contracts
+        run: make -f m13-adaptive-compression.mk m13-contract
+      - name: Record identities
+        run: |
+          mkdir -p build/m13-hardware
+          git rev-parse HEAD > build/m13-hardware/chromofold.commit
+          sha256sum '${{ inputs.model_path }}' > build/m13-hardware/model.sha256
+          nvidia-smi -q > build/m13-hardware/nvidia-smi.txt
+      - name: Run adaptive server workload
+        run: |
+          test -x build/m11-pinned-llama-server/llama.cpp/build/bin/llama-server
+          build/m11-pinned-llama-server/llama.cpp/build/bin/llama-server \
+            -m '${{ inputs.model_path }}' --kv-cache-backend chromofold \
+            --chromofold-compression adaptive --chromofold-cache-mode read-write \
+            --chromofold-cache-path '${{ inputs.cache_path }}' --port 8080 \
+            > build/m13-hardware/server.log 2>&1 &
+          echo $! > build/m13-hardware/server.pid
+      - name: Warm and restart persistent cache
+        run: |
+          python3 integrations/llama.cpp/performance/run_soak.py --requests 100 --output build/m13-hardware/cold.json
+          kill -INT "$(cat build/m13-hardware/server.pid)"
+          sleep 5
+          test -s '${{ inputs.cache_path }}'
+      - name: Validate evidence
+        run: python3 integrations/llama.cpp/adaptive/validate_adaptive_evidence.py build/m13-hardware/adaptive-evidence.json
+      - name: Upload proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m13-adaptive-proof
+          path: build/m13-hardware

@@ -1,0 +1,16 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"ChromoFold M13 adaptive compression evidence",
+  "type":"object",
+  "required":["adaptive_policy","codec_distribution","quality_budget","recompression","memory_budget","persistent_cache","cache_integrity","runtime"],
+  "properties":{
+    "adaptive_policy":{"type":"object","required":["mode","model_sha256"]},
+    "codec_distribution":{"type":"object","required":["int2_pages","int4_pages","escalation_pages","mixed_codec_attention_launches"],"properties":{"int2_pages":{"type":"integer","minimum":1},"int4_pages":{"type":"integer","minimum":1},"escalation_pages":{"type":"integer","minimum":1},"mixed_codec_attention_launches":{"type":"integer","minimum":1}}},
+    "quality_budget":{"type":"object","required":["violations","invalid_candidates_rejected"],"properties":{"violations":{"const":0},"invalid_candidates_rejected":{"type":"integer","minimum":1}}},
+    "recompression":{"type":"object","required":["successes","bytes_saved"],"properties":{"successes":{"type":"integer","minimum":1},"bytes_saved":{"type":"integer","minimum":1}}},
+    "memory_budget":{"type":"object","required":["configured_bytes","peak_bytes","honored"],"properties":{"honored":{"const":true}}},
+    "persistent_cache":{"type":"object","required":["pages_written","pages_reloaded","warm_hits"],"properties":{"pages_written":{"type":"integer","minimum":1},"pages_reloaded":{"type":"integer","minimum":1},"warm_hits":{"type":"integer","minimum":1}}},
+    "cache_integrity":{"type":"object","required":["corrupted_records_rejected","incompatible_records_rejected"],"properties":{"corrupted_records_rejected":{"type":"integer","minimum":1}}},
+    "runtime":{"type":"object","required":["dense_fallback_launches","cuda_errors","page_refs_at_shutdown","snapshot_refs_at_shutdown"],"properties":{"dense_fallback_launches":{"const":0},"cuda_errors":{"const":0},"page_refs_at_shutdown":{"const":0},"snapshot_refs_at_shutdown":{"const":0}}}
+  }
+}
