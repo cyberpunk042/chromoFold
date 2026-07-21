@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace chromofold::cuda_runtime {
