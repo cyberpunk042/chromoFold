@@ -23,10 +23,10 @@ jobs:
       image: nvidia/cuda:12.6.3-devel-ubuntu22.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install compiler and make
+      - name: Install compiler, make, and Python
         run: |
           apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends build-essential ca-certificates
+          DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends build-essential ca-certificates python3
       - name: Compile adapter translation units
         run: make -f m9-llama.mk llama-adapter-compile
       - name: Run no-GPU adapter seam
