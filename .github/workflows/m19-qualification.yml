@@ -1,0 +1,27 @@
+name: M19 qualification
+
+on:
+  pull_request:
+    paths:
+      - 'include/chromofold/qualification.h'
+      - 'src/qualification.cpp'
+      - 'tests/m19_qualification_contract.cpp'
+      - 'integrations/llama.cpp/qualification/**'
+      - 'm19-qualification.mk'
+      - '.github/workflows/m19-qualification.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Contract and evidence gates
+        run: make -f m19-qualification.mk m19-all
+      - name: Python syntax
+        run: python3 -m py_compile integrations/llama.cpp/qualification/validate_m19_evidence.py
