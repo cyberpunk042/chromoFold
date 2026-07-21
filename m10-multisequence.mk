@@ -8,7 +8,7 @@ multisequence-compile:
 	mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) -c src/multisequence_cache.cpp -o $(BUILD)/multisequence_cache.o
 	$(CXX) $(CXXFLAGS) -Iintegrations/llama.cpp/multisequence -c integrations/llama.cpp/multisequence/llama_server_multisequence_bridge.cpp -o $(BUILD)/llama_server_multisequence_bridge.o
-	$(CXX) $(CXXFLAGS) tests/m10_multisequence_contract.cpp $(BUILD)/multisequence_cache.o -o $(BUILD)/m10_multisequence_contract
+	$(CXX) $(CXXFLAGS) tests/m10_multisequence_host_contract.cpp $(BUILD)/multisequence_cache.o -o $(BUILD)/m10_multisequence_contract
 
 multisequence-contract: multisequence-compile
 	$(BUILD)/m10_multisequence_contract
