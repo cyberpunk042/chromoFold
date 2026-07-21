@@ -1,0 +1,35 @@
+name: RC1 runtime harness contracts
+
+on:
+  pull_request:
+    paths:
+      - "tools/chromofold_runtime_harness.py"
+      - "tests/test_chromofold_runtime_harness.py"
+      - "integrations/llama.cpp/qualification/rc1-runtime-harness.schema.json"
+      - "integrations/llama.cpp/qualification/validate_rc1_runtime_evidence.py"
+      - "rc1-runtime-harness.mk"
+      - ".github/workflows/rc1-runtime-harness*.yml"
+      - "docs/rc1-runtime-harness.md"
+  push:
+    branches: [main]
+    paths:
+      - "tools/chromofold_runtime_harness.py"
+      - "tests/test_chromofold_runtime_harness.py"
+      - "integrations/llama.cpp/qualification/rc1-runtime-harness.schema.json"
+      - "integrations/llama.cpp/qualification/validate_rc1_runtime_evidence.py"
+      - "rc1-runtime-harness.mk"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install jsonschema
+      - run: make -f rc1-runtime-harness.mk rc1-harness-all
