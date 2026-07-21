@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ChromoFold M15 multi-GPU CUDA evidence",
+  "type": "object",
+  "required": ["environment", "upstream", "topology", "transfers", "collectives", "attention", "failures", "sanitizer", "shutdown"],
+  "properties": {
+    "environment": {"type": "object", "required": ["gpu_count", "cuda", "driver", "chromofold_commit"]},
+    "upstream": {"type": "object", "required": ["patched_server_executed", "llama_commit", "gguf_sha256"], "properties": {"patched_server_executed": {"const": true}}},
+    "topology": {"type": "object", "required": ["devices_used", "peer_topology_verified"], "properties": {"devices_used": {"type": "integer", "minimum": 2}, "peer_topology_verified": {"const": true}}},
+    "transfers": {"type": "object", "required": ["p2p_copy_calls", "p2p_bytes", "transfer_errors"], "properties": {"p2p_copy_calls": {"type": "integer", "minimum": 1}, "p2p_bytes": {"type": "integer", "minimum": 1}, "transfer_errors": {"const": 0}}},
+    "collectives": {"type": "object", "required": ["calls", "bytes", "tensor_parallel_batches"], "properties": {"calls": {"type": "integer", "minimum": 1}, "bytes": {"type": "integer", "minimum": 1}, "tensor_parallel_batches": {"type": "integer", "minimum": 1}}},
+    "attention": {"type": "object", "required": ["mixed_codec_pages_consumed", "remote_pages_loaded", "dense_fallback_launches", "cuda_errors", "cross_device_contamination"], "properties": {"mixed_codec_pages_consumed": {"type": "integer", "minimum": 1}, "remote_pages_loaded": {"type": "integer", "minimum": 1}, "dense_fallback_launches": {"const": 0}, "cuda_errors": {"const": 0}, "cross_device_contamination": {"const": 0}}},
+    "failures": {"type": "object", "required": ["device_failure_injected", "failed_closed", "recovery_completed"], "properties": {"device_failure_injected": {"const": true}, "failed_closed": {"const": true}, "recovery_completed": {"const": true}}},
+    "sanitizer": {"type": "object", "required": ["memcheck", "racecheck", "initcheck", "synccheck"], "properties": {"memcheck": {"const": true}, "racecheck": {"const": true}, "initcheck": {"const": true}, "synccheck": {"const": true}}},
+    "shutdown": {"type": "object", "required": ["audit_passed", "page_refs", "snapshot_refs"], "properties": {"audit_passed": {"const": true}, "page_refs": {"const": 0}, "snapshot_refs": {"const": 0}}}
+  }
+}
