@@ -1,0 +1,25 @@
+You are validating a deterministic long-context inference path. Read the following numbered facts and answer only with the final checksum sentence requested at the end.
+
+Fact 01: ChromoFold uses immutable sealed pages for compressed history.
+Fact 02: The active tail remains uncompressed until the page is full.
+Fact 03: Dense fallback is forbidden after ChromoFold selection.
+Fact 04: Page publication must be transactional.
+Fact 05: Failed sealing preserves the full active page.
+Fact 06: Device K and V tensors retain token, head, and dimension ordering.
+Fact 07: MHA and integer-ratio GQA are supported by the initial envelope.
+Fact 08: Query and output tensors stay on the CUDA device.
+Fact 09: Sealed history and the active tail share one online-softmax result.
+Fact 10: Runtime evidence records real counters rather than inferred claims.
+Fact 11: A successful proof includes at least one page seal.
+Fact 12: A successful proof includes compressed attention consuming sealed values.
+Fact 13: A successful proof includes active-tail consumption.
+Fact 14: A successful proof records zero dense fallback launches.
+Fact 15: A successful proof records zero CUDA errors.
+Fact 16: The dense and ChromoFold runs use the same GGUF hash.
+Fact 17: The paired runs use the same prompt, seed, context, and sampling parameters.
+Fact 18: Numerical evidence records finite outputs and logit differences.
+Fact 19: Memory evidence must be measured on hardware.
+Fact 20: Compute Sanitizer results are part of the reproducibility bundle.
+
+Repeat Facts 01 through 20 internally until the prompt exceeds one compressed page. Then answer exactly:
+CHROMOFOLD CHECKSUM: TRANSACTIONAL DEVICE KV PROOF
