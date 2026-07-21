@@ -1,0 +1,60 @@
+name: M10 CUDA sequence resolver
+
+on:
+  pull_request:
+    paths:
+      - 'include/chromofold/multisequence_cuda_resolver.h'
+      - 'src/cuda/multisequence_cuda_resolver.cu'
+      - 'integrations/llama.cpp/multisequence/**'
+      - 'tests/m10_cuda_sequence_resolver_contract.cpp'
+      - 'm10-cuda-sequence-resolver.mk'
+      - 'docs/m10-cuda-sequence-resolver.md'
+      - '.github/workflows/m10-cuda-sequence-resolver*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile resolver transaction
+        run: make -f m10-cuda-sequence-resolver.mk cuda-resolver-compile CUDA_ARCH=80
+      - name: Run host contract
+        run: make -f m10-cuda-sequence-resolver.mk cuda-resolver-contract CUDA_ARCH=80
+      - name: Verify integration anchors
+        run: make -f m10-cuda-sequence-resolver.mk cuda-resolver-anchor-check
+      - name: Reject executable dense fallback seams
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R -E 'fallback_to_dense|dispatch_dense|run_dense_fallback|use_dense_fallback' \
+              src/cuda/multisequence_cuda_resolver.cu \
+              integrations/llama.cpp/multisequence/llama_server_cuda_resolver_bridge.cpp; then
+            echo 'Unexpected executable dense fallback seam' >&2
+            exit 1
+          fi
+          if grep -E 'dense_fallback_launches[[:space:]]*(\+\+|\+=|=[[:space:]]*[1-9])' \
+              src/cuda/multisequence_cuda_resolver.cu; then
+            echo 'Dense fallback counter can become positive' >&2
+            exit 1
+          fi
+      - name: Validate evidence schema and validator
+        run: |
+          apt-get update && apt-get install -y python3 python3-pip
+          python3 -m pip install --break-system-packages jsonschema
+          python3 -m json.tool integrations/llama.cpp/multisequence/cuda-resolver-evidence.schema.json >/dev/null
+          python3 -m py_compile integrations/llama.cpp/multisequence/validate_cuda_resolver_evidence.py
+      - name: Reject fabricated success evidence
+        run: |
+          cat > /tmp/false.json <<'JSON'
+          {"device_resolution":{"pages_registered":1,"descriptor_tables_built":1,"sequence_attention_launches":2},"snapshots":{"acquired":2,"released":1,"in_flight_at_shutdown":1},"batching":{"compressed_batches_executed":1,"sequences_per_batch_peak":2},"isolation":{"cross_sequence_contamination":0,"isolated_baselines_match":true},"reclamation":{"pages_reclaimed":1,"page_refs_at_shutdown":0},"runtime":{"dense_fallback_launches":0,"cuda_errors":0,"sanitizer_passed":true}}
+          JSON
+          if python3 integrations/llama.cpp/multisequence/validate_cuda_resolver_evidence.py /tmp/false.json; then
+            echo 'False evidence was accepted' >&2
+            exit 1
+          fi

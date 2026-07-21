@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["device_resolution", "snapshots", "batching", "isolation", "reclamation", "runtime"],
+  "properties": {
+    "device_resolution": {
+      "type": "object",
+      "required": ["pages_registered", "descriptor_tables_built", "sequence_attention_launches"],
+      "properties": {
+        "pages_registered": {"type": "integer", "minimum": 1},
+        "descriptor_tables_built": {"type": "integer", "minimum": 1},
+        "sequence_attention_launches": {"type": "integer", "minimum": 2}
+      }
+    },
+    "snapshots": {
+      "type": "object",
+      "required": ["acquired", "released", "in_flight_at_shutdown"],
+      "properties": {
+        "acquired": {"type": "integer", "minimum": 1},
+        "released": {"type": "integer", "minimum": 1},
+        "in_flight_at_shutdown": {"const": 0}
+      }
+    },
+    "batching": {
+      "type": "object",
+      "required": ["compressed_batches_executed", "sequences_per_batch_peak"],
+      "properties": {
+        "compressed_batches_executed": {"type": "integer", "minimum": 1},
+        "sequences_per_batch_peak": {"type": "integer", "minimum": 2}
+      }
+    },
+    "isolation": {
+      "type": "object",
+      "required": ["cross_sequence_contamination", "isolated_baselines_match"],
+      "properties": {
+        "cross_sequence_contamination": {"const": 0},
+        "isolated_baselines_match": {"const": true}
+      }
+    },
+    "reclamation": {
+      "type": "object",
+      "required": ["pages_reclaimed", "page_refs_at_shutdown"],
+      "properties": {
+        "pages_reclaimed": {"type": "integer", "minimum": 1},
+        "page_refs_at_shutdown": {"const": 0}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["dense_fallback_launches", "cuda_errors", "sanitizer_passed"],
+      "properties": {
+        "dense_fallback_launches": {"const": 0},
+        "cuda_errors": {"const": 0},
+        "sanitizer_passed": {"const": true}
+      }
+    }
+  }
+}
