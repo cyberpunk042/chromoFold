@@ -1,0 +1,62 @@
+name: M9 llama end-to-end
+
+on:
+  pull_request:
+    paths:
+      - "integrations/llama.cpp/e2e/**"
+      - "m9-llama-e2e.mk"
+      - ".github/workflows/m9-llama-e2e.yml"
+      - "specs/12-m9-llama-e2e.md"
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      model_path:
+        description: Absolute GGUF path on the self-hosted runner
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  pin-and-harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tooling
+        run: sudo apt-get update && sudo apt-get install --yes python3 git cmake build-essential
+      - name: Validate Python harnesses
+        run: python3 -m py_compile integrations/llama.cpp/e2e/*.py
+      - name: Fetch and verify exact llama.cpp revision
+        run: make -f m9-llama-e2e.mk llama-fetch llama-patch-check
+      - name: Validate evidence rejection gates
+        run: |
+          mkdir -p build/m9-llama-e2e
+          cat > build/m9-llama-e2e/negative.json <<'JSON'
+          {"runtime":{"llama_commit":"76f46ad29d61fd8c1401e8221842934bf62a6064","chromofold_commit":"0000000000000000000000000000000000000000"},"model":{"path":"none.gguf","sha256":"0000000000000000000000000000000000000000000000000000000000000000"},"backend":"chromofold","correctness":{"finite":true,"token_match_rate":1.0,"max_logit_error":0.0},"memory":{"peak_vram_bytes":1,"kv_bytes":1},"latency":{"prefill_ms":1,"decode_ms_per_token":1},"capacity":{"context":8192,"completed":true},"counters":{"compressed_attention_launches":0,"sealed_values_consumed":0,"dense_fallback_launches":0}}
+          JSON
+          if python3 integrations/llama.cpp/e2e/validate_evidence.py build/m9-llama-e2e/negative.json --require-claim; then
+            echo "validator accepted false claim" >&2
+            exit 1
+          fi
+
+  hardware-evidence:
+    if: github.event_name == 'workflow_dispatch' && inputs.model_path != ''
+    runs-on: [self-hosted, linux, x64, cuda, chromofold-gpu]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build paired llama.cpp variants
+        run: make -f m9-llama-e2e.mk llama-build-dense llama-build-chromofold
+      - name: Run paired evidence and capacity sweep
+        env:
+          MODEL: ${{ inputs.model_path }}
+        run: |
+          make -f m9-llama-e2e.mk llama-dense-evidence MODEL="$MODEL"
+          make -f m9-llama-e2e.mk llama-chromofold-evidence MODEL="$MODEL"
+          make -f m9-llama-e2e.mk llama-capacity MODEL="$MODEL"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m9-llama-e2e-evidence
+          path: build/m9-llama-e2e
+          if-no-files-found: error
