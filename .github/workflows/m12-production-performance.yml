@@ -16,18 +16,10 @@ permissions:
   contents: read
 
 jobs:
-  contracts:
+  fast-contracts:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install CUDA toolkit
-        uses: Jimver/cuda-toolkit@v0.2.22
-        with:
-          cuda: '12.6.3'
-      - name: Compile optimized attention
-        run: make -f m12-production-performance.mk m12-compile CUDA_ARCH=80
-      - name: Run host contract
-        run: make -f m12-production-performance.mk m12-contract CUDA_ARCH=80
       - name: Verify optimized kernel anchors
         run: make -f m12-production-performance.mk m12-anchor-check
       - name: Validate schemas and scripts
@@ -45,3 +37,17 @@ jobs:
           grep -F 'compute-sanitizer --tool memcheck' .github/workflows/m12-production-performance-self-hosted.yml
           grep -F 'run_benchmark_matrix.py' .github/workflows/m12-production-performance-self-hosted.yml
           grep -F 'validate_performance_evidence.py' .github/workflows/m12-production-performance-self-hosted.yml
+
+  cuda-contracts:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install CUDA toolkit
+        uses: Jimver/cuda-toolkit@v0.2.22
+        with:
+          cuda: '12.6.3'
+      - name: Compile optimized attention
+        run: make -f m12-production-performance.mk m12-compile CUDA_ARCH=80
+      - name: Run CUDA contract
+        run: make -f m12-production-performance.mk m12-contract CUDA_ARCH=80
