@@ -1,0 +1,54 @@
+name: M9 GPU validation
+
+on:
+  pull_request:
+    paths:
+      - "include/chromofold/kv_gpu_fixture.hpp"
+      - "include/chromofold/kv_cuda_owner.hpp"
+      - "src/runtime/kv_gpu_fixture.cpp"
+      - "src/cuda/kv_cuda_owner.cu"
+      - "src/cuda/paged_kv_attention.cu"
+      - "tests/kv_gpu_fixture_test.cpp"
+      - "tests/paged_kv_cuda_correctness.cu"
+      - "benchmarks/paged_kv_cuda_bench.cu"
+      - "m9-gpu.mk"
+      - ".github/workflows/m9-gpu-validation.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixture-and-compile:
+    runs-on: ubuntu-latest
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compiler and make
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends build-essential ca-certificates
+      - name: Run deterministic fixture tests
+        run: make -f m9-gpu.mk gpu-fixture-test
+      - name: Compile hardware correctness and benchmark binaries
+        run: |
+          make -f m9-gpu.mk build/paged_kv_cuda_correctness
+          make -f m9-gpu.mk build/paged_kv_cuda_bench
+
+  hardware-correctness:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, x64, cuda, chromofold-gpu]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run GPU correctness under Compute Sanitizer
+        run: make -f m9-gpu.mk gpu-sanitize
+      - name: Record GPU benchmark evidence
+        run: make -f m9-gpu.mk gpu-benchmark
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m9-paged-kv-results
+          path: build/results/*.json
+          if-no-files-found: error

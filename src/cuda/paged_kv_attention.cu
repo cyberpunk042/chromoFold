@@ -2,6 +2,7 @@
 #include "chromofold/detail/block_huffman_device.cuh"
 
 #include <cuda_runtime.h>
+#include <math_constants.h>
 #include <math.h>
 
 namespace {
