@@ -1,0 +1,48 @@
+name: M9 paged CUDA
+
+on:
+  pull_request:
+    paths:
+      - "include/chromofold/kv_cuda.h"
+      - "include/chromofold/detail/block_huffman_device.cuh"
+      - "src/cuda/paged_kv_attention.cu"
+      - "tests/paged_kv_cuda_seam.cu"
+      - ".github/workflows/m9-paged-cuda.yml"
+  push:
+    branches: [main]
+    paths:
+      - "include/chromofold/kv_cuda.h"
+      - "include/chromofold/detail/block_huffman_device.cuh"
+      - "src/cuda/paged_kv_attention.cu"
+      - "tests/paged_kv_cuda_seam.cu"
+      - ".github/workflows/m9-paged-cuda.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m9-paged-cuda-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-and-seam:
+    runs-on: ubuntu-latest
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host compiler
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends build-essential ca-certificates
+      - name: Compile paged CUDA translation unit
+        run: |
+          mkdir -p build
+          nvcc -O2 -std=c++17 -arch=sm_75 -Iinclude -Xcompiler=-Wall,-Wextra,-Werror \
+            -c src/cuda/paged_kv_attention.cu -o build/paged_kv_attention.o
+      - name: Link and run no-GPU validation seam
+        run: |
+          nvcc -O2 -std=c++17 -arch=sm_75 -Iinclude \
+            tests/paged_kv_cuda_seam.cu src/cuda/paged_kv_attention.cu \
+            -o build/paged_kv_cuda_seam
+          ./build/paged_kv_cuda_seam
