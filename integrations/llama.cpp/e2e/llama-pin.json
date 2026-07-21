@@ -1,0 +1,33 @@
+{
+  "repository": "https://github.com/ggml-org/llama.cpp.git",
+  "commit": "76f46ad29d61fd8c1401e8221842934bf62a6064",
+  "resolved_at": "2026-07-21",
+  "build_option": "GGML_CHROMOFOLD",
+  "runtime_backend": "chromofold",
+  "supported_backend": "cuda",
+  "minimum_cuda": "12.6",
+  "required_paths": [
+    "CMakeLists.txt",
+    "common/arg.cpp",
+    "common/common.h",
+    "src/llama-kv-cache.cpp",
+    "src/llama-context.cpp",
+    "tools/cli/cli.cpp"
+  ],
+  "required_cli_flags": [
+    "--kv-cache-backend",
+    "--chromofold-page-size",
+    "--chromofold-window",
+    "--chromofold-stats-json"
+  ],
+  "claim_requires": [
+    "real_model_loaded",
+    "compressed_attention_launches_positive",
+    "sealed_values_consumed_positive",
+    "dense_fallback_launches_zero",
+    "finite_outputs",
+    "baseline_pair",
+    "actual_memory_accounting",
+    "capacity_sweep"
+  ]
+}
