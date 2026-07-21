@@ -1,0 +1,36 @@
+name: M16 disaggregated serving
+
+on:
+  pull_request:
+    paths:
+      - 'include/chromofold/disaggregated_serving.h'
+      - 'src/disaggregated_serving.cpp'
+      - 'tests/m16_disaggregated_serving_contract.cpp'
+      - 'integrations/llama.cpp/disaggregated/**'
+      - 'm16-disaggregated-serving.mk'
+      - 'docs/m16-disaggregated-serving.md'
+      - '.github/workflows/m16-disaggregated-serving*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run cluster contract
+        run: make -f m16-disaggregated-serving.mk m16-contract
+      - name: Validate schema and scripts
+        run: make -f m16-disaggregated-serving.mk m16-schema
+      - name: Verify semantic anchors
+        run: make -f m16-disaggregated-serving.mk m16-anchor-check
+      - name: Reject fabricated evidence
+        run: make -f m16-disaggregated-serving.mk m16-false-evidence
+      - name: Reject unsafe bypass seams
+        run: |
+          if grep -R -E 'skip_auth|ignore_integrity|accept_stale_lease|fallback_to_dense' include/chromofold/disaggregated_serving.h src/disaggregated_serving.cpp; then
+            echo 'Unsafe M16 bypass seam detected' >&2
+            exit 1
+          fi
