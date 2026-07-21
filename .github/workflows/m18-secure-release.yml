@@ -1,0 +1,35 @@
+name: M18 secure release
+
+on:
+  pull_request:
+    paths:
+      - 'include/chromofold/security_release.h'
+      - 'src/security_release.cpp'
+      - 'tests/m18_security_release_contract.cpp'
+      - 'tools/chromofold_release.py'
+      - 'integrations/llama.cpp/security/**'
+      - 'containers/m18/**'
+      - 'deploy/m18/**'
+      - 'm18-secure-release.mk'
+      - '.github/workflows/m18-secure-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Security and release contract
+        run: make -f m18-secure-release.mk m18-contract
+      - name: Schemas and Python syntax
+        run: make -f m18-secure-release.mk m18-schema
+      - name: Semantic anchors
+        run: make -f m18-secure-release.mk m18-anchor-check
+      - name: Fabricated evidence rejected
+        run: make -f m18-secure-release.mk m18-false-evidence
+      - name: Generate deterministic SBOM fixture
+        run: make -f m18-secure-release.mk m18-sbom
