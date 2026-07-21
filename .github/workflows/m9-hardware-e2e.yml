@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install --disable-pip-version-check jsonschema
+      - run: python -m pip install --disable-pip-version-check jsonschema pyyaml
       - run: make -f m9-hardware-e2e.mk hardware-proof-check
       - run: make -f m9-hardware-e2e.mk hardware-proof-false-claim
       - name: Verify no model files are committed
@@ -45,7 +45,3 @@ jobs:
               yaml.safe_load(path.read_text())
               print(path)
           PY
-        env:
-          PYTHONPATH: .
-      - run: python -m pip install pyyaml
-        if: always()
