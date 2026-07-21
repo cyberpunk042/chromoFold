@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("harness", ROOT / "tools/chromofold_runtime_harness.py")
 assert SPEC and SPEC.loader
 harness = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = harness
 SPEC.loader.exec_module(harness)
 
 
