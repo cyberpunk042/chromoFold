@@ -1,0 +1,65 @@
+name: M15 multi-GPU CUDA hardware proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_path:
+        description: Runner-local GGUF path
+        required: true
+      cuda_arch:
+        description: CUDA architecture
+        required: true
+        default: '80'
+
+permissions:
+  contents: read
+
+jobs:
+  hardware-proof:
+    runs-on: [self-hosted, linux, x64, nvidia, multigpu]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record topology
+        run: |
+          mkdir -p build/m15/evidence
+          nvidia-smi topo -m > build/m15/evidence/topology.txt
+          nvidia-smi -q > build/m15/evidence/nvidia-smi.txt
+          nvcc --version > build/m15/evidence/nvcc.txt
+          sha256sum '${{ inputs.model_path }}' > build/m15/evidence/model.sha256
+      - name: Compile runtime
+        run: make -f m15-multigpu-cuda-runtime.mk m15-contract CUDA_ARCH='${{ inputs.cuda_arch }}'
+      - name: Compute Sanitizer
+        run: make -f m15-multigpu-cuda-runtime.mk m15-sanitize CUDA_ARCH='${{ inputs.cuda_arch }}'
+      - name: Apply and build pinned server
+        run: |
+          make -f m11-pinned-llama-server.mk m11-fetch
+          make -f m11-pinned-llama-server.mk m11-apply
+          make -f m11-pinned-llama-server.mk m11-build CUDA_ARCH='${{ inputs.cuda_arch }}'
+      - name: Start two-GPU server
+        run: |
+          CUDA_VISIBLE_DEVICES=0,1 build/m11-pinned-llama-server/llama.cpp/build/bin/llama-server \
+            -m '${{ inputs.model_path }}' --kv-cache-backend chromofold \
+            --chromofold-distributed tensor-parallel --chromofold-devices 0,1 \
+            --chromofold-require-peer-access --parallel 8 --port 8080 \
+            > build/m15/evidence/server.log 2>&1 &
+          echo $! > build/m15/server.pid
+          for i in $(seq 1 120); do curl -fsS http://127.0.0.1:8080/health && exit 0; sleep 1; done
+          exit 1
+      - name: Run concurrent distributed workload
+        run: python3 integrations/llama.cpp/multigpu/run_m15_workload.py --output build/m15/evidence/workload.json
+      - name: Inject device failure
+        run: curl -fsS -X POST http://127.0.0.1:8080/chromofold/fault/device/1 > build/m15/evidence/failure.json
+      - name: Graceful shutdown
+        if: always()
+        run: |
+          test -f build/m15/server.pid && kill -INT "$(cat build/m15/server.pid)" || true
+          sleep 5
+      - name: Validate strict evidence
+        run: python3 integrations/llama.cpp/multigpu/validate_m15_evidence.py build/m15/evidence/m15-evidence.json
+      - name: Upload proof bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m15-multigpu-cuda-proof
+          path: build/m15
