@@ -1,0 +1,40 @@
+name: M9 device KV dataplane
+
+on:
+  pull_request:
+    paths:
+      - "include/chromofold/device_kv_dataplane.h"
+      - "src/cuda/device_kv_dataplane.cu"
+      - "integrations/llama.cpp/device_kv_graph_bridge.*"
+      - "tests/device_kv_dataplane_contract.cpp"
+      - "m9-device-kv.mk"
+      - ".github/workflows/m9-device-kv.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile-contract:
+    runs-on: ubuntu-latest
+    container:
+      image: nvidia/cuda:12.6.3-devel-ubuntu22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends build-essential ca-certificates
+      - name: Compile device dataplane
+        run: make -f m9-device-kv.mk device-kv-compile
+      - name: Compile and run host contract
+        run: make -f m9-device-kv.mk device-kv-contract
+      - name: Compile llama graph bridge
+        run: |
+          nvcc -O2 -std=c++17 -arch=sm_75 -Iinclude -Iintegrations/llama.cpp -Xcompiler=-Wall,-Wextra,-Werror \
+            -c integrations/llama.cpp/device_kv_graph_bridge.cpp -o build/m9-device-kv/device_kv_graph_bridge.o
+      - name: Validate fail-closed sealing contract
+        run: |
+          grep -q "transactional candidate page" src/cuda/device_kv_dataplane.cu
+          grep -q "dense_fallback_launches" include/chromofold/device_kv_dataplane.h
+          grep -q "cudaMallocAsync" src/cuda/device_kv_dataplane.cu
