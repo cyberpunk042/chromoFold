@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["runtime", "model", "backend", "correctness", "memory", "latency", "capacity", "counters"],
+  "properties": {
+    "runtime": {"type": "object", "required": ["llama_commit", "chromofold_commit"]},
+    "model": {"type": "object", "required": ["path", "sha256"]},
+    "backend": {"enum": ["dense", "chromofold"]},
+    "correctness": {"type": "object", "required": ["finite", "token_match_rate", "max_logit_error"]},
+    "memory": {"type": "object", "required": ["peak_vram_bytes", "kv_bytes"]},
+    "latency": {"type": "object", "required": ["prefill_ms", "decode_ms_per_token"]},
+    "capacity": {"type": "object", "required": ["context", "completed"]},
+    "counters": {
+      "type": "object",
+      "required": ["compressed_attention_launches", "sealed_values_consumed", "dense_fallback_launches"]
+    }
+  }
+}
