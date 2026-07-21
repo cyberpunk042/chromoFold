@@ -4,7 +4,7 @@ BUILD ?= build/m9-gpu-seal-attention
 CUDA_ARCH ?= 80
 
 INCLUDES := -Iinclude
-NVCCFLAGS := -std=c++17 -O2 -lineinfo -arch=sm_$(CUDA_ARCH) $(INCLUDES)
+NVCCFLAGS := -std=c++17 -O2 -lineinfo -arch=sm_$(CUDA_ARCH) -include math_constants.h $(INCLUDES)
 
 .PHONY: gpu-seal-compile gpu-seal-contract gpu-seal-sanitize gpu-seal-clean
 
