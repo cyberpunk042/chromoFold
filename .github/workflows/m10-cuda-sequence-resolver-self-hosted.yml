@@ -1,0 +1,49 @@
+name: M10 CUDA sequence resolver self-hosted
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_path:
+        description: Runner-local GGUF path
+        required: true
+      cuda_arch:
+        description: CUDA architecture
+        required: false
+        default: '80'
+
+permissions:
+  contents: read
+
+jobs:
+  hardware-proof:
+    runs-on: [self-hosted, linux, x64, nvidia]
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify NVIDIA runner
+        run: nvidia-smi
+      - name: Compile CUDA resolver
+        run: make -f m10-cuda-sequence-resolver.mk cuda-resolver-compile CUDA_ARCH=${{ inputs.cuda_arch }}
+      - name: Run Compute Sanitizer
+        run: make -f m10-cuda-sequence-resolver.mk cuda-resolver-sanitize CUDA_ARCH=${{ inputs.cuda_arch }}
+      - name: Fetch pinned llama.cpp
+        run: make -f m9-llama-e2e.mk llama-fetch
+      - name: Apply ChromoFold integration layers
+        run: |
+          make -f m9-llama-runtime.mk llama-runtime-apply
+          make -f m9-llama-graph.mk llama-graph-apply
+      - name: Build pinned llama-server
+        run: make -f m9-hardware-e2e.mk hardware-proof-build CUDA_ARCH=${{ inputs.cuda_arch }}
+      - name: Run concurrent server workload
+        run: |
+          python3 integrations/llama.cpp/multisequence/run_concurrent_server_workload.py \
+            --server build/llama.cpp/bin/llama-server \
+            --model '${{ inputs.model_path }}' \
+            --output build/m10-cuda-sequence-resolver/evidence
+      - name: Validate resolver evidence
+        run: python3 integrations/llama.cpp/multisequence/validate_cuda_resolver_evidence.py build/m10-cuda-sequence-resolver/evidence/evidence.json
+      - name: Upload reproducibility bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: m10-cuda-sequence-resolver-evidence
+          path: build/m10-cuda-sequence-resolver/evidence
