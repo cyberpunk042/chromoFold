@@ -36,7 +36,7 @@ typedef struct cf_kv_device_page {
     uint32_t k_max_code_length;
     uint32_t v_max_code_length;
     uint32_t zero_point;
-    uint32_t reserved;
+    uint32_t kv_head;
 } cf_kv_device_page;
 
 /* Launch description for one layer across a batch of query tokens.
