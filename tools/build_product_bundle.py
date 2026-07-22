@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import tarfile
@@ -21,6 +22,14 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def safe_version(value: str) -> str:
+    """Return a filesystem-safe version without changing its evidence meaning."""
+    normalized = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip(".-_")
+    if not normalized:
+        raise ValueError("version must contain at least one filename-safe character")
+    return normalized
+
+
 def add_file(archive: tarfile.TarFile, source: Path, arcname: str) -> None:
     info = archive.gettarinfo(str(source), arcname)
     info.uid = info.gid = 0
@@ -31,7 +40,8 @@ def add_file(archive: tarfile.TarFile, source: Path, arcname: str) -> None:
 
 
 def build(output: Path, version: str) -> dict[str, object]:
-    staging = output.parent / f"chromofold-{version}"
+    archive_version = safe_version(version)
+    staging = output.parent / f"chromofold-{archive_version}"
     if staging.exists():
         shutil.rmtree(staging)
     staging.mkdir(parents=True)
@@ -65,7 +75,12 @@ def build(output: Path, version: str) -> dict[str, object]:
     launcher.write_text("#!/bin/sh\nexec python3 \"$(dirname \"$0\")/hub/server.py\" \"$@\"\n", encoding="utf-8")
     launcher.chmod(0o755)
     files.append({"path": "chromofold-hub", "sha256": sha256(launcher), "size": launcher.stat().st_size})
-    manifest = {"schema": "chromofold.product-bundle.v1", "version": version, "files": files}
+    manifest = {
+        "schema": "chromofold.product-bundle.v1",
+        "version": version,
+        "archive_version": archive_version,
+        "files": files,
+    }
     (staging / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
     output.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(output, "w:gz", format=tarfile.PAX_FORMAT) as archive:
