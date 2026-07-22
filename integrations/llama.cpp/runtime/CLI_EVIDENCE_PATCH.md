@@ -61,11 +61,17 @@ python3 integrations/llama.cpp/e2e/validate_evidence.py build/e2e/chromofold.jso
 ## Status of this work
 
 - ✅ Written; **`llama-cli` builds with the hook** (verified).
-- ⚠️ **The e2e run was not completed in the development sandbox.** Interactive `llama-cli` did not run to
-  completion here — with an instruct model it auto-enters conversation mode and, in this WSL environment, foreground/
-  detached GPU CLI invocations were terminated before finishing (the `llama-server` path, by contrast, ran real
-  generation fine — see the RC1 plain-server smoke). This is an environment/CLI-mode issue, independent of the
-  patch; the commands above should complete on a machine that runs `llama-cli` normally.
+- ⚠️ Interactive `llama-cli` did not run to completion in this WSL sandbox (instruct-model conversation auto-mode +
+  GPU-CLI instability). Independent of the patch; the `llama-cli` commands above should complete on a normal box.
+- ✅ **Runnable here via the server path.** [`../e2e/run_pair_server.py`](../e2e/run_pair_server.py) drives the same
+  evidence contract through `llama-server` (which serves non-interactive `/completion` and works in this sandbox).
+  Verified on the RTX 2080 Ti: the **dense** e2e is `valid`, the **chromofold** e2e is `valid` at the baseline with
+  a recorded `dense_fallback_launches: 1`, and `--require-claim` is **honestly rejected** ("compressed attention
+  was not exercised"). Both backends generated real tokens with real peak VRAM (~2.3 GB) sampled externally.
+
+  This also gives layer 2 a **verification path that works here**: run the server with `--parallel 1` (single
+  sequence — within the supported scope) and, once the compressed backend is wired in, `run_pair_server.py` can
+  check `--require-claim` on this GPU.
 
 ## What's left (layer 2 — the real claim)
 
