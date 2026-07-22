@@ -380,9 +380,17 @@ ms → 59 ms). Telling detail: N=4096 decode and batch (Qn=256) now take the **s
 are latency-hidden, so the kernel is **throughput-efficient**; the residual ~4.5× is absolute per-token decode cost
 (extraction ALU + word loads + low single-query occupancy), **compute-bound, not bandwidth-bound**. The P1 bandwidth
 crossover needs a regime where KV bandwidth is the true bottleneck (much larger model/context, or a bandwidth-
-starved GPU), which a 0.5B model on a 2080 Ti is not. **P10's "equal-or-better latency" is not met here.** Remaining
-M11 levers (shared-mem page staging — read each word once per block; vectorized uint4 loads) chip further, but the
-honest bar: capacity/accuracy wins are real; the latency win awaits a memory-bound workload. Reported (P7).
+starved GPU), which a 0.5B model on a 2080 Ti is not. **P10's "equal-or-better latency" is not met here.** The
+next lever is *not* shared-mem page staging: at N=4096 the Qn=1 (57.9 ms) and Qn=256 (58.3 ms) times are equal, so
+the kernel is bound by a **per-token work chain every thread runs** (extraction ALU + the local-memory
+`query[]`/`weighted[]` arrays — 1536-byte stack frame, 0 spills), not by bandwidth or occupancy; since int4 reads
+few bytes, staging global words into shared memory wouldn't touch the bottleneck. The real next step is a
+**warp-cooperative rewrite** (a warp per query head, `head_dim` split across lanes → per-lane state in registers not
+local memory, QK reduced by shuffle) — a significant, correctness-risky kernel rewrite. It should be
+**evidence-gated by `ncu`**, but performance counters are permission-blocked on this box (`ERR_NVGPUCTRPERM`), so
+that diagnosis can't be confirmed here. Honest bar: capacity/accuracy wins are real; the two landed decode
+optimizations cut latency 5× (24×→4.5×); the rest awaits a warp-cooperative kernel and/or a memory-bound workload.
+Reported (P7).
 
 **Remaining for the P10 ship criterion:** (1) the **latency** gap above — now ~4.5× after two M11 optimizations; further
 M11 kernel work (or a memory-bound workload where the bandwidth savings dominate) to reach parity; (2) the
