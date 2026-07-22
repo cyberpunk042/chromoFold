@@ -1,0 +1,37 @@
+name: Benchmark reproduction
+description: Submit auditable ChromoFold benchmark evidence from another machine.
+title: "[reproduction] "
+labels: ["evidence", "reproduction"]
+body:
+  - type: markdown
+    attributes:
+      value: "Reproductions must include enough information to rerun and challenge the result. Screenshots alone are insufficient."
+  - type: input
+    id: claim
+    attributes: {label: Claim reproduced, placeholder: "kv-attention, fused-matmul, sparse-gather..."}
+    validations: {required: true}
+  - type: textarea
+    id: hardware
+    attributes: {label: Hardware and software environment, description: "GPU, VRAM, CPU, RAM, OS, driver, CUDA and runtime versions."}
+    validations: {required: true}
+  - type: input
+    id: revision
+    attributes: {label: Source revision and artifact SHA-256}
+    validations: {required: true}
+  - type: textarea
+    id: commands
+    attributes: {label: Complete commands, render: shell}
+    validations: {required: true}
+  - type: textarea
+    id: results
+    attributes: {label: Results and raw artifact links, description: "Include correctness, latency, throughput, VRAM and failures."}
+    validations: {required: true}
+  - type: checkboxes
+    id: declaration
+    attributes:
+      label: Declaration
+      options:
+        - label: I included negative, failed and incomplete outcomes.
+          required: true
+        - label: I did not change the workload between baseline and candidate without documenting it.
+          required: true
