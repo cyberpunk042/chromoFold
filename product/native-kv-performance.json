@@ -1,5 +1,5 @@
 {
-  "schema": "chromofold.native-kv-performance.v2",
+  "schema": "chromofold.native-kv-performance.v1",
   "title": "Native compressed paged-attention performance",
   "hardware": "NVIDIA RTX 2080 Ti (sm_75)",
   "model_shape": "Qwen2.5-0.5B-derived attention dimensions and controlled head-dimension sweep",
