@@ -11,6 +11,7 @@ on:
       - "product/compatibility.json"
       - "product/profiles.json"
       - "product/portal.json"
+      - "product/kv-scaling.json"
       - "tools/build_public_site.py"
       - "tests/test_public_site.py"
       - "site.mk"
@@ -26,6 +27,7 @@ on:
       - "product/compatibility.json"
       - "product/profiles.json"
       - "product/portal.json"
+      - "product/kv-scaling.json"
       - "tools/build_public_site.py"
       - "tests/test_public_site.py"
       - "site.mk"
@@ -61,6 +63,8 @@ jobs:
           test -f dist/site/releases.html
           test -f dist/site/contribute.html
           test -f dist/site/sitemap.xml
+          grep -q 'chromofold.public-site-data.v4' dist/site/data.js
+          grep -q 'kv_scaling' dist/site/data.js
       - name: Upload preview artifact
         uses: actions/upload-artifact@v4
         with:

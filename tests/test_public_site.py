@@ -33,9 +33,14 @@ def test_portal_sources_are_versioned() -> None:
     compatibility = json.loads((ROOT / "product/compatibility.json").read_text(encoding="utf-8"))
     profiles = json.loads((ROOT / "product/profiles.json").read_text(encoding="utf-8"))
     portal = json.loads((ROOT / "product/portal.json").read_text(encoding="utf-8"))
+    scaling = json.loads((ROOT / "product/kv-scaling.json").read_text(encoding="utf-8"))
     assert compatibility["schema"] == "chromofold.compatibility.v1"
     assert profiles["schema"] == "chromofold.profiles.v1"
     assert portal["schema"] == "chromofold.portal.v1"
+    assert scaling["schema"] == "chromofold.kv-scaling.v1"
+    assert len(scaling["context_tokens"]) == len(scaling["latency_ms"]["decode_all"])
+    assert len(scaling["context_tokens"]) == len(scaling["latency_ms"]["window_read"])
+    assert "prototype" in scaling["boundary"].lower()
     assert portal["reproduction_fields"] and portal["contribution_paths"]
 
 
@@ -45,6 +50,10 @@ def test_pages_preserve_evidence_boundaries() -> None:
     assert "guaranteed" not in text.lower()
     assert "works on every" not in text.lower()
     assert "browser cannot" in text.lower() or "browser planner is advisory" in text.lower()
+    evidence = (ROOT / "site/evidence.html").read_text(encoding="utf-8")
+    assert 'id="kv-chart"' in evidence
+    assert 'id="chart-latency"' in evidence and 'id="chart-memory"' in evidence
+    assert 'id="quality-table"' in evidence and 'id="native-status"' in evidence
 
 
 def test_builder_generates_complete_portal() -> None:
@@ -60,8 +69,8 @@ def test_builder_generates_complete_portal() -> None:
             assert '<script src="data.js"></script>' in html
             assert '<script src="app.js" defer></script>' in html
         data = (output / "data.js").read_text(encoding="utf-8")
-        assert "chromofold.public-site-data.v3" in data
-        for key in ("release_channel", "compatibility", "profiles", "portal"):
+        assert "chromofold.public-site-data.v4" in data
+        for key in ("release_channel", "compatibility", "profiles", "portal", "kv_scaling"):
             assert key in data
         sitemap = (output / "sitemap.xml").read_text(encoding="utf-8")
         for page in PAGES[1:]:
@@ -75,6 +84,8 @@ def test_client_runtime_is_safe_and_route_aware() -> None:
     assert 'evidence_level:"estimate"' in source
     assert "renderCompatibility" in source
     assert "renderEvidenceLadder" in source
+    assert "renderKvScaling" in source
+    assert "chartSvg" in source
     assert "navigator.clipboard" in source
 
 
@@ -84,7 +95,7 @@ def test_manual_dispatch_deploys_pages() -> None:
     assert workflow.count("if: github.event_name != 'pull_request'") == 2
     assert "actions/upload-pages-artifact@v3" in workflow
     assert "actions/deploy-pages@v4" in workflow
-    for path in ("product/compatibility.json", "product/profiles.json", "product/portal.json"):
+    for path in ("product/compatibility.json", "product/profiles.json", "product/portal.json", "product/kv-scaling.json"):
         assert workflow.count(path) == 2
 
 
