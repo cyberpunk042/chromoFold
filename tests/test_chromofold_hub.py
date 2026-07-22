@@ -47,6 +47,19 @@ def test_bundle_has_manifest_and_launcher() -> None:
         assert "chromofold-test/hub/static/index.html" in names
 
 
+def test_bundle_version_is_filename_safe() -> None:
+    builder = load("build_product_bundle_safe", ROOT / "tools" / "build_product_bundle.py")
+    assert builder.safe_version("30/merge") == "30-merge"
+    assert builder.safe_version("refs/tags/v1.0.0") == "refs-tags-v1.0.0"
+    with tempfile.TemporaryDirectory() as temp:
+        output = Path(temp) / "chromofold-ci.tar.gz"
+        result = builder.build(output, "30/merge")
+        assert result["manifest"]["version"] == "30/merge"
+        assert result["manifest"]["archive_version"] == "30-merge"
+        with tarfile.open(output, "r:gz") as archive:
+            assert "chromofold-30-merge/manifest.json" in archive.getnames()
+
+
 def test_hub_binds_loopback_by_default() -> None:
     source = (ROOT / "hub" / "server.py").read_text(encoding="utf-8")
     assert 'default="127.0.0.1"' in source
@@ -58,5 +71,6 @@ if __name__ == "__main__":
     test_static_assets_exist()
     test_catalogs_are_json()
     test_bundle_has_manifest_and_launcher()
+    test_bundle_version_is_filename_safe()
     test_hub_binds_loopback_by_default()
     print("ChromoFold Hub tests: PASS")
