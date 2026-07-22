@@ -44,8 +44,15 @@ def test_portal_sources_are_versioned() -> None:
     assert scaling["schema"] == "chromofold.kv-scaling.v1"
     assert native["schema"] == "chromofold.native-kv-performance.v1"
     assert campaign["schema"] == "chromofold.kv-crossover-campaign.v1"
-    assert native["headline"]["latency_win"] is False
+    assert native["headline"]["latency_win"] is True
+    assert native["headline"]["universal_latency_win"] is False
+    assert native["headline"]["ship_criterion_met_in_regime"] is True
     assert native["history"][-1]["gap_vs_dense"] > 1
+    crossover = native["crossover_sweep"]
+    assert crossover["status"] == "measured"
+    assert any(row["head_dim"] == 64 and max(row["dense_over_compressed"]) >= 1.02 for row in crossover["rows"])
+    assert any(row["head_dim"] == 128 and max(row["dense_over_compressed"]) < 1 for row in crossover["rows"])
+    assert campaign["status"] == "initial-sweep-measured"
     assert "NO_CROSSOVER" in campaign["publication_states"]
     assert evidence_schema["properties"]["schema"]["const"] == "chromofold.evidence-result.v1"
     assert session_schema["properties"]["schema"]["const"] == "chromofold.qualification-session.v1"
@@ -97,6 +104,7 @@ def test_client_runtime_is_safe_and_route_aware() -> None:
     assert "renderKvScaling" in source
     assert "historyChart" in performance
     assert "current_gap_vs_fair_dense" in performance
+    assert "crossover_sweep" in performance
     assert "fetch(" not in performance and "XMLHttpRequest" not in performance
 
 
