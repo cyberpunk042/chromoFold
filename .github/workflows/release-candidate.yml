@@ -1,0 +1,70 @@
+name: ChromoFold release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without refs/tags/ prefix (for example v1.0.0-rc1)"
+        required: true
+        type: string
+      publish:
+        description: "Create a GitHub prerelease after validation"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate product, assistant, hub and site contracts
+        run: |
+          make -f product-assistant.mk product-all
+          make -f assistant.mk assistant-all
+          make -f hub.mk hub-all VERSION="${{ inputs.version }}"
+          make -f site.mk site-all
+          python3 tests/test_release_candidate.py
+      - name: Build release candidate assets
+        run: python3 tools/build_release_candidate.py --version "${{ inputs.version }}" --output dist/release
+      - name: Verify checksums
+        working-directory: dist/release
+        run: sha256sum --check SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chromofold-${{ inputs.version }}-release-candidate
+          path: dist/release/*
+          if-no-files-found: error
+
+  publish:
+    if: inputs.publish
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: chromofold-${{ inputs.version }}-release-candidate
+          path: dist/release
+      - name: Publish immutable prerelease assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: ChromoFold ${{ inputs.version }}
+          prerelease: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: dist/release/*
+          body: |
+            This is a ChromoFold release candidate.
+
+            The archive, SBOM, provenance and checksums are published together. This release is not production-qualified unless exact-digest RC1 evidence reports PASS.
