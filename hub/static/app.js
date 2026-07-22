@@ -2,32 +2,21 @@ const $ = (id) => document.getElementById(id);
 let selectedProfile = null;
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    headers: {"Content-Type": "application/json"},
-    ...options,
-  });
+  const response = await fetch(path, {headers: {"Content-Type": "application/json"}, ...options});
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || JSON.stringify(data));
   return data;
 }
 
-function pretty(value) {
-  return JSON.stringify(value, null, 2);
-}
-
-function profileName(result) {
-  return result.profile || result.recommended_profile || result.name || null;
-}
+const pretty = (value) => JSON.stringify(value, null, 2);
+const profileName = (result) => result.profile || result.recommended_profile || result.name || null;
 
 async function loadCatalog() {
   const data = await api("/api/catalog");
   const profiles = data.profiles.profiles || data.profiles;
   $("catalog").innerHTML = Object.entries(profiles).map(([name, profile]) => `
-    <article class="card">
-      <h3>${name}</h3>
-      <p>${profile.description || profile.goal || "ChromoFold profile"}</p>
-      <small>${profile.qualification_required === false ? "Measured use still recommended" : "Hardware qualification required"}</small>
-    </article>`).join("");
+    <article class="card"><h3>${name}</h3><p>${profile.description || profile.goal || "ChromoFold profile"}</p>
+    <small>${profile.qualification_required === false ? "Measured use still recommended" : "Hardware qualification required"}</small></article>`).join("");
   const levels = data.evidence.levels || data.evidence;
   $("evidence").innerHTML = Object.entries(levels).map(([name, level]) => `
     <article class="card"><h3>${name}</h3><p>${level.description || level.requirement || pretty(level)}</p></article>`).join("");
@@ -39,38 +28,48 @@ $("inspect").addEventListener("click", async () => {
   catch (error) { $("machine").textContent = String(error); }
 });
 
+$("ask-assistant").addEventListener("click", async () => {
+  $("assistant-answer").textContent = "Building a qualification-aware plan…";
+  try {
+    const result = await api("/api/assistant", {
+      method: "POST",
+      body: JSON.stringify({
+        intent: $("intent").value,
+        model: $("assistant-model").value,
+        context: Number($("assistant-context").value),
+        concurrency: Number($("assistant-concurrency").value),
+      }),
+    });
+    if (result.recommendation) {
+      selectedProfile = profileName(result.recommendation);
+      $("configure").disabled = !selectedProfile;
+    }
+    $("assistant-answer").innerHTML = `<div class="status">${result.evidence_level || "explanation"} — ${result.qualification_required ? "qualification required" : "no performance claim"}</div><pre>${pretty(result)}</pre>`;
+  } catch (error) { $("assistant-answer").textContent = String(error); }
+});
+
 $("recommend").addEventListener("click", async () => {
   $("recommendation").textContent = "Analyzing workload…";
   $("configure").disabled = true;
   try {
     const result = await api("/api/recommend", {
       method: "POST",
-      body: JSON.stringify({
-        goal: $("goal").value,
-        model: $("model").value,
-        context: Number($("context").value),
-        concurrency: Number($("concurrency").value),
-      }),
+      body: JSON.stringify({goal: $("goal").value, model: $("model").value,
+        context: Number($("context").value), concurrency: Number($("concurrency").value)}),
     });
     selectedProfile = profileName(result);
     $("recommendation").innerHTML = `<div class="status">Estimate — qualification required</div><pre>${pretty(result)}</pre>`;
     $("configure").disabled = !selectedProfile;
-  } catch (error) {
-    $("recommendation").textContent = String(error);
-  }
+  } catch (error) { $("recommendation").textContent = String(error); }
 });
 
 $("configure").addEventListener("click", async () => {
   $("bundle").textContent = "Generating…";
   try {
-    const result = await api("/api/configure", {
-      method: "POST",
-      body: JSON.stringify({profile: selectedProfile, model: $("model").value}),
-    });
+    const model = $("model").value || $("assistant-model").value;
+    const result = await api("/api/configure", {method: "POST", body: JSON.stringify({profile: selectedProfile, model})});
     $("bundle").textContent = pretty(result);
-  } catch (error) {
-    $("bundle").textContent = String(error);
-  }
+  } catch (error) { $("bundle").textContent = String(error); }
 });
 
 loadCatalog().catch((error) => { $("catalog").textContent = String(error); });

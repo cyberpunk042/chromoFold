@@ -1,0 +1,35 @@
+name: ChromoFold guided assistant
+
+on:
+  pull_request:
+    paths:
+      - "tools/chromofold_assistant.py"
+      - "product/assistant-intents.json"
+      - "install/**"
+      - "hub/**"
+      - "tests/test_chromofold_assistant.py"
+      - "tools/build_product_bundle.py"
+      - "assistant.mk"
+      - ".github/workflows/guided-assistant.yml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Guided assistant contracts
+        run: make -f assistant.mk assistant-all
+      - name: Product bundle integration
+        run: make -f hub.mk hub-all VERSION="assistant-${{ github.sha }}"
+      - name: Verify packaged installers
+        run: |
+          test -f dist/chromofold-assistant-${{ github.sha }}.tar.gz
+          test -f dist/chromofold-assistant-${{ github.sha }}.tar.gz.sha256

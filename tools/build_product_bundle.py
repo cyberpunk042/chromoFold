@@ -23,7 +23,6 @@ def sha256(path: Path) -> str:
 
 
 def safe_version(value: str) -> str:
-    """Return a filesystem-safe version without changing its evidence meaning."""
     normalized = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip(".-_")
     if not normalized:
         raise ValueError("version must contain at least one filename-safe character")
@@ -47,6 +46,7 @@ def build(output: Path, version: str) -> dict[str, object]:
     staging.mkdir(parents=True)
     selected = [
         "tools/chromofold.py",
+        "tools/chromofold_assistant.py",
         "tools/chromofold_runtime_harness.py",
         "tools/chromofold_qualification_adapter.py",
         "hub/server.py",
@@ -57,8 +57,12 @@ def build(output: Path, version: str) -> dict[str, object]:
         "product/compatibility.json",
         "product/downloads.json",
         "product/evidence-registry.json",
+        "product/assistant-intents.json",
+        "install/install.sh",
+        "install/install.ps1",
         "docs/PRODUCT.md",
         "docs/HUB.md",
+        "docs/ASSISTANT.md",
     ]
     files: list[dict[str, object]] = []
     for relative in selected:
@@ -68,7 +72,7 @@ def build(output: Path, version: str) -> dict[str, object]:
         target = staging / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
-        if source.suffix == ".py":
+        if source.suffix == ".py" or source.name == "install.sh":
             target.chmod(target.stat().st_mode | stat.S_IXUSR)
         files.append({"path": relative, "sha256": sha256(target), "size": target.stat().st_size})
     launcher = staging / "chromofold-hub"

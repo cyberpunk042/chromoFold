@@ -223,27 +223,36 @@ def cmd_catalog(_: argparse.Namespace) -> int:
     return 0
 
 
+def _json_flag(command: argparse.ArgumentParser) -> None:
+    """Accept the stable product-consumer flag; output is JSON regardless."""
+    command.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="chromofold", description="Analyze, configure and qualify ChromoFold workloads")
     sub = p.add_subparsers(dest="command", required=True)
     inspect = sub.add_parser("inspect", help="Inspect local hardware")
     inspect.add_argument("--output", type=Path)
+    _json_flag(inspect)
     inspect.set_defaults(func=cmd_inspect)
     rec = sub.add_parser("recommend", help="Recommend a safe profile")
     rec.add_argument("--goal", choices=["longer-context", "more-users", "shared-prefix", "lowest-risk", "balanced"], default="balanced")
     rec.add_argument("--model", type=Path)
     rec.add_argument("--context", type=int, default=32768)
     rec.add_argument("--concurrency", type=int, default=1)
+    _json_flag(rec)
     rec.set_defaults(func=cmd_recommend)
     config = sub.add_parser("configure", help="Generate a runtime bundle")
     config.add_argument("--profile", choices=["safe", "balanced", "maximum-context", "high-concurrency", "shared-prefix"], default="balanced")
     config.add_argument("--runtime", choices=["llama.cpp"], default="llama.cpp")
     config.add_argument("--model", type=Path)
     config.add_argument("--output", type=Path, default=Path("chromofold-bundle"))
+    _json_flag(config)
     config.set_defaults(func=cmd_configure)
     compare = sub.add_parser("compare", help="Compare baseline and ChromoFold result JSON")
     compare.add_argument("--baseline", type=Path, required=True)
     compare.add_argument("--chromofold", type=Path, required=True)
+    _json_flag(compare)
     compare.set_defaults(func=cmd_compare)
     qualify = sub.add_parser("qualify", help="Run the repository qualification harness")
     qualify.add_argument("--mode", choices=["smoke", "candidate", "stable"], default="smoke")
@@ -253,6 +262,7 @@ def parser() -> argparse.ArgumentParser:
     qualify.add_argument("--runtime-endpoint")
     qualify.set_defaults(func=cmd_qualify)
     catalog = sub.add_parser("catalog", help="Show profiles and compatibility")
+    _json_flag(catalog)
     catalog.set_defaults(func=cmd_catalog)
     return p
 
