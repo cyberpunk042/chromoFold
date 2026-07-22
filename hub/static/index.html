@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Inspect, configure, compare and qualify ChromoFold on your machine.">
+  <title>ChromoFold Hub</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <div class="brand">ChromoFold <span>Hub</span></div>
+    <div class="claim">Run more AI on the GPU you already own.</div>
+  </header>
+  <main>
+    <section class="hero panel">
+      <div>
+        <p class="eyebrow">GPU-native compressed compute</p>
+        <h1>Find the right memory strategy, generate a safe bundle, then prove the result.</h1>
+        <p>Recommendations are estimates until a hardware qualification returns PASS. Silent fallback is never treated as success.</p>
+      </div>
+      <button id="inspect">Inspect this machine</button>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <h2>Machine</h2>
+        <pre id="machine">Not inspected yet.</pre>
+      </article>
+      <article class="panel">
+        <h2>Workload configurator</h2>
+        <label>Goal<select id="goal"><option value="balanced">Balanced</option><option value="longer-context">Longer context</option><option value="high-concurrency">High concurrency</option><option value="shared-prefix">Shared prefixes</option></select></label>
+        <label>Model path or name<input id="model" placeholder="model.gguf"></label>
+        <label>Target context<input id="context" type="number" min="1" value="65536"></label>
+        <label>Target concurrency<input id="concurrency" type="number" min="1" value="4"></label>
+        <button id="recommend">Recommend profile</button>
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <h2>Recommendation</h2>
+        <div id="recommendation" class="empty">No recommendation yet.</div>
+        <button id="configure" disabled>Generate local bundle</button>
+      </article>
+      <article class="panel">
+        <h2>Generated bundle</h2>
+        <pre id="bundle">Nothing generated.</pre>
+      </article>
+    </section>
+
+    <section class="panel">
+      <h2>Profiles and compatibility</h2>
+      <div id="catalog" class="cards"></div>
+    </section>
+
+    <section class="panel proof">
+      <h2>Evidence maturity</h2>
+      <p>ChromoFold separates estimates, measured results, qualified results and independent reproduction. The interface must never collapse those levels into one marketing claim.</p>
+      <div id="evidence" class="cards"></div>
+    </section>
+  </main>
+  <footer>ChromoFold Hub runs locally. Hardware inspection and generated files stay on this machine.</footer>
+  <script src="/app.js" defer></script>
+</body>
+</html>

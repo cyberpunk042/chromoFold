@@ -1,0 +1,65 @@
+name: ChromoFold Hub distribution
+
+on:
+  pull_request:
+    paths:
+      - "hub/**"
+      - "product/**"
+      - "tools/chromofold.py"
+      - "tools/build_product_bundle.py"
+      - "tests/test_chromofold_hub.py"
+      - "hub.mk"
+      - ".github/workflows/hub-distribution.yml"
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Product and Hub contracts
+        env:
+          BUNDLE_VERSION: ci-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          make -f product-assistant.mk product-all
+          make -f hub.mk hub-all VERSION="${BUNDLE_VERSION}"
+          test -f "dist/chromofold-${BUNDLE_VERSION}.tar.gz"
+          test -f "dist/chromofold-${BUNDLE_VERSION}.tar.gz.sha256"
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chromofold-hub-${{ github.sha }}
+          path: |
+            dist/chromofold-ci-${{ github.sha }}.tar.gz
+            dist/chromofold-ci-${{ github.sha }}.tar.gz.sha256
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: contracts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build signed-input release bundle
+        run: make -f hub.mk hub-bundle VERSION="${GITHUB_REF_NAME}"
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/chromofold-${{ github.ref_name }}.tar.gz
+            dist/chromofold-${{ github.ref_name }}.tar.gz.sha256
+          generate_release_notes: true
