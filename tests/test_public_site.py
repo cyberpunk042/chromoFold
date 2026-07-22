@@ -103,8 +103,9 @@ def test_client_runtime_is_safe_and_route_aware() -> None:
     assert "const esc" in source
     assert "renderKvScaling" in source
     assert "historyChart" in performance
-    assert "current_gap_vs_fair_dense" in performance
-    assert "crossover_sweep" in performance
+    assert "best_measured_latency_win" in performance
+    assert "data.crossover.interpretation" in performance
+    assert "data.initial_sweep" in performance
     assert "fetch(" not in performance and "XMLHttpRequest" not in performance
 
 
