@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PAGES = ("index.html", "technology.html", "evidence.html", "compatibility.html", "start.html", "releases.html", "contribute.html")
+PAGES = ("index.html", "technology.html", "evidence.html", "compatibility.html", "start.html", "workbench.html", "releases.html", "contribute.html")
 
 
 def load(name: str, path: Path):
@@ -34,10 +34,12 @@ def test_portal_sources_are_versioned() -> None:
     profiles = json.loads((ROOT / "product/profiles.json").read_text(encoding="utf-8"))
     portal = json.loads((ROOT / "product/portal.json").read_text(encoding="utf-8"))
     scaling = json.loads((ROOT / "product/kv-scaling.json").read_text(encoding="utf-8"))
+    evidence_schema = json.loads((ROOT / "product/evidence-result.schema.json").read_text(encoding="utf-8"))
     assert compatibility["schema"] == "chromofold.compatibility.v1"
     assert profiles["schema"] == "chromofold.profiles.v1"
     assert portal["schema"] == "chromofold.portal.v1"
     assert scaling["schema"] == "chromofold.kv-scaling.v1"
+    assert evidence_schema["properties"]["schema"]["const"] == "chromofold.evidence-result.v1"
     assert len(scaling["context_tokens"]) == len(scaling["latency_ms"]["decode_all"])
     assert len(scaling["context_tokens"]) == len(scaling["latency_ms"]["window_read"])
     assert "prototype" in scaling["boundary"].lower()
@@ -54,6 +56,9 @@ def test_pages_preserve_evidence_boundaries() -> None:
     assert 'id="kv-chart"' in evidence
     assert 'id="chart-latency"' in evidence and 'id="chart-memory"' in evidence
     assert 'id="quality-table"' in evidence and 'id="native-status"' in evidence
+    workbench = (ROOT / "site/workbench.html").read_text(encoding="utf-8")
+    assert "not maintainer qualification" in workbench
+    assert "never uploaded" in workbench
 
 
 def test_builder_generates_complete_portal() -> None:
@@ -62,15 +67,15 @@ def test_builder_generates_complete_portal() -> None:
         output = Path(temp) / "site"
         result = builder.build(output)
         assert result["pages"] == list(PAGES)
-        for name in (*PAGES, "404.html", "styles.css", "app.js", "data.js", "robots.txt", "sitemap.xml", ".nojekyll"):
+        for name in (*PAGES, "404.html", "styles.css", "app.js", "workbench.js", "workbench.css", "data.js", "robots.txt", "sitemap.xml", ".nojekyll"):
             assert (output / name).is_file(), name
         for page in PAGES:
             html = (output / page).read_text(encoding="utf-8")
             assert '<script src="data.js"></script>' in html
             assert '<script src="app.js" defer></script>' in html
         data = (output / "data.js").read_text(encoding="utf-8")
-        assert "chromofold.public-site-data.v4" in data
-        for key in ("release_channel", "compatibility", "profiles", "portal", "kv_scaling"):
+        assert "chromofold.public-site-data.v5" in data
+        for key in ("release_channel", "compatibility", "profiles", "portal", "kv_scaling", "evidence_result_schema"):
             assert key in data
         sitemap = (output / "sitemap.xml").read_text(encoding="utf-8")
         for page in PAGES[1:]:
@@ -95,8 +100,9 @@ def test_manual_dispatch_deploys_pages() -> None:
     assert workflow.count("if: github.event_name != 'pull_request'") == 2
     assert "actions/upload-pages-artifact@v3" in workflow
     assert "actions/deploy-pages@v4" in workflow
-    for path in ("product/compatibility.json", "product/profiles.json", "product/portal.json", "product/kv-scaling.json"):
+    for path in ("product/compatibility.json", "product/profiles.json", "product/portal.json", "product/kv-scaling.json", "product/evidence-result.schema.json"):
         assert workflow.count(path) == 2
+    assert "dist/site/workbench.html" in workflow
 
 
 if __name__ == "__main__":
