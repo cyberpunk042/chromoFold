@@ -13,9 +13,9 @@ PRODUCT = ROOT / "product"
 PUBLIC_URL = "https://cyberpunk042.github.io/chromoFold/"
 PAGES = (
     "index.html", "technology.html", "evidence.html", "compatibility.html",
-    "start.html", "releases.html", "contribute.html",
+    "start.html", "workbench.html", "releases.html", "contribute.html",
 )
-ASSETS = ("styles.css", "app.js")
+ASSETS = ("styles.css", "app.js", "workbench.js")
 
 
 def load_object(path: Path) -> dict[str, Any]:
@@ -61,7 +61,7 @@ def build(output: Path) -> dict[str, Any]:
 
     claims = load_object(PRODUCT / "public-claims.json")
     payload = {
-        "schema": "chromofold.public-site-data.v4",
+        "schema": "chromofold.public-site-data.v5",
         "claims": claims["claims"],
         "claim_boundary": claims["boundary"],
         "downloads": normalized_downloads(load_object(PRODUCT / "downloads.json")),
@@ -71,6 +71,7 @@ def build(output: Path) -> dict[str, Any]:
         "profiles": load_object(PRODUCT / "profiles.json"),
         "portal": load_object(PRODUCT / "portal.json"),
         "kv_scaling": load_object(PRODUCT / "kv-scaling.json"),
+        "evidence_result_schema": load_object(PRODUCT / "evidence-result.schema.json"),
         "repository": "https://github.com/cyberpunk042/chromoFold",
     }
     (output / "data.js").write_text(
