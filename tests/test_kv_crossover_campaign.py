@@ -23,9 +23,14 @@ def test_native_performance_contract_is_honest() -> None:
     data = json.loads((ROOT / "product/native-kv-performance.json").read_text(encoding="utf-8"))
     assert data["schema"] == "chromofold.native-kv-performance.v1"
     assert data["headline"]["speedup_over_original"] == 122
-    assert data["headline"]["latency_win"] is False
-    assert data["headline"]["ship_criterion_met"] is False
+    assert data["headline"]["latency_win"] is True
+    assert data["headline"]["universal_latency_win"] is False
+    assert data["headline"]["ship_criterion_met_in_regime"] is True
     assert data["history"][-1]["gap_vs_dense"] > 1.0
+    sweep = data["crossover_sweep"]
+    assert sweep["status"] == "measured"
+    assert any(row["head_dim"] == 64 and max(row["dense_over_compressed"]) >= 1.02 for row in sweep["rows"])
+    assert any(row["head_dim"] == 128 and max(row["dense_over_compressed"]) < 1.0 for row in sweep["rows"])
     assert "engine-level" in " ".join(data["limitations"]).lower()
 
 
