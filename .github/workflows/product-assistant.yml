@@ -1,0 +1,32 @@
+name: Product assistant contracts
+
+on:
+  pull_request:
+    paths:
+      - "tools/chromofold.py"
+      - "product/**"
+      - "tests/test_chromofold_product.py"
+      - "product-assistant.mk"
+      - ".github/workflows/product-assistant.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tools/chromofold.py"
+      - "product/**"
+      - "tests/test_chromofold_product.py"
+      - "product-assistant.mk"
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run product contracts
+        run: make -f product-assistant.mk product-all
