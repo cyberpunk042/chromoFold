@@ -374,16 +374,17 @@ err); moving it needs a non-uniform/vector quantizer, not scales or entropy codi
 **Latency — the other half of P10, measured** (`make -f m9-gpu.mk gpu-latency`, fair dense-f16 kernel, identical
 online-softmax). Initially an honest negative: **~20-25× slower** — the decoder read the code *one bit at a time*
 (a global load per bit). **M11 fast path** (fixed-width word-cached decode: read each 32-bit word once, extract
-whole symbols, direct row start — bit-exact, `paged-kv-seam` still passes) cut that **3.4×**, to **~7× slower** (e.g.
-N=4096 decode 243 ms → 69 ms). Still slower, and the key finding is *why*: at batch (Qn=256, high occupancy) it's
-**still 7×**, so the kernel is **compute-bound (decode extraction), not bandwidth-bound** — the P1 bandwidth
+whole symbols, direct row start) then **V-decode fusion** (drop the per-token `value[]` local array) — both
+bit-exact, `paged-kv-seam` still passes — cut the gap from ~24× to **~4.5×** (4-5× total speedup; N=4096 decode 243
+ms → 59 ms). Telling detail: N=4096 decode and batch (Qn=256) now take the **same** time (59 ms) — the extra queries
+are latency-hidden, so the kernel is **throughput-efficient**; the residual ~4.5× is absolute per-token decode cost
+(extraction ALU + word loads + low single-query occupancy), **compute-bound, not bandwidth-bound**. The P1 bandwidth
 crossover needs a regime where KV bandwidth is the true bottleneck (much larger model/context, or a bandwidth-
 starved GPU), which a 0.5B model on a 2080 Ti is not. **P10's "equal-or-better latency" is not met here.** Remaining
-M11 levers (vectorized uint4 loads, shared-mem page staging, fusing the V decode to drop the `value[]` temp) chip at
-the constant, but the honest bar is: the capacity/accuracy wins are real; the latency win awaits a memory-bound
-workload. Reported, not buried (P7).
+M11 levers (shared-mem page staging — read each word once per block; vectorized uint4 loads) chip further, but the
+honest bar: capacity/accuracy wins are real; the latency win awaits a memory-bound workload. Reported (P7).
 
-**Remaining for the P10 ship criterion:** (1) the **latency** gap above — now ~7× after the M11 fast path; further
+**Remaining for the P10 ship criterion:** (1) the **latency** gap above — now ~4.5× after two M11 optimizations; further
 M11 kernel work (or a memory-bound workload where the bandwidth savings dominate) to reach parity; (2) the
 **end-to-end** win — this capacity number is engine-level, but llama still
 allocates its own dense KV in the live path, so the through-runtime win needs replacing llama's KV allocation (not
