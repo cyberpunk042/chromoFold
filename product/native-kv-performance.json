@@ -1,0 +1,43 @@
+{
+  "schema": "chromofold.native-kv-performance.v1",
+  "title": "Native compressed paged-attention performance",
+  "hardware": "NVIDIA RTX 2080 Ti (sm_75)",
+  "model_shape": "Qwen2.5-0.5B attention dimensions",
+  "context_tokens": 4096,
+  "history": [
+    {"stage": "original bit-by-bit decoder", "compressed_latency_us": 243000, "fair_dense_latency_us": 10125, "gap_vs_dense": 24.0},
+    {"stage": "fixed-width word-cached decoder", "compressed_latency_us": 68992, "fair_dense_latency_us": 9856, "gap_vs_dense": 7.0},
+    {"stage": "V-decode fused into online softmax", "compressed_latency_us": 59119, "fair_dense_latency_us": 13138, "gap_vs_dense": 4.5},
+    {"stage": "warp-cooperative compressed kernel", "compressed_latency_us": 2528, "fair_dense_latency_us": 1912, "gap_vs_dense": 1.32}
+  ],
+  "fair_comparisons": [
+    {"workload": "N=512 decode", "compressed_us": 388, "dense_f16_us": 310, "compressed_over_dense": 1.25},
+    {"workload": "N=4096 decode", "compressed_us": 2528, "dense_f16_us": 1912, "compressed_over_dense": 1.32},
+    {"workload": "N=4096 batch Qn=256", "compressed_us": 6185, "dense_f16_us": 4537, "compressed_over_dense": 1.36}
+  ],
+  "correctness": {
+    "gpu_reference_max_error": 0.000000536,
+    "roundtrip_max_error": 0.000000149,
+    "adapter_int4_max_error": 0.000000238,
+    "adapter_int8_max_error": 0.000000656,
+    "paged_kv_seam": "PASS"
+  },
+  "headline": {
+    "speedup_over_original": 122,
+    "current_gap_vs_fair_dense": "~1.3× slower",
+    "latency_win": false,
+    "ship_criterion_met": false
+  },
+  "crossover_hypothesis": "Parity or a latency win requires a bandwidth-bound regime where the four-times-smaller int4 memory reads dominate decode arithmetic. Candidate dimensions are larger head_dim, longer context, higher concurrent KV pressure, or a bandwidth-starved GPU.",
+  "limitations": [
+    "These are engine-level kernel measurements, not end-to-end llama.cpp serving results.",
+    "The fair dense baseline is equally warp-cooperative; the compressed kernel is still slower on the measured workload.",
+    "Nsight Compute counters were unavailable because ERR_NVGPUCTRPERM blocked profiling.",
+    "The live llama.cpp path still allocates its own dense KV cache."
+  ],
+  "source_commits": [
+    "bb74f5b86105e3cd472df6dec3f63540e04a1581",
+    "61e37b7ebc61406ef4243819f9731354e582fad3",
+    "4d28bfcb270f84f5dd2467aa9979a5cfe3788686"
+  ]
+}
