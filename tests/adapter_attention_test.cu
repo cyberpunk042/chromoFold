@@ -19,8 +19,8 @@ static void ck(cudaError_t e, const char* m) {
     if (e != cudaSuccess) { std::fprintf(stderr, "%s: %s\n", m, cudaGetErrorString(e)); std::exit(2); }
 }
 
-static int run(uint32_t bits) {
-    const uint32_t hd = 64, page_size = 32, N = 70, kvh = 2, qh = 14, gqa = 7;
+static int run(uint32_t hd, uint32_t bits) {
+    const uint32_t page_size = 32, N = 70, kvh = 2, qh = 14, gqa = 7;
     std::mt19937 rng(9001);
     std::normal_distribution<float> nd(0.f, 1.f);
 
@@ -95,14 +95,18 @@ static int run(uint32_t bits) {
         }
     }
     mse /= (qh * hd);
-    std::printf("{\"bits\":%u,\"tokens\":%u,\"kv_heads\":%u,\"query_heads\":%u,\"gqa\":%u,\"max_abs_error\":%g,\"mse\":%g}\n",
-                bits, N, kvh, qh, gqa, maxabs, mse);
+    std::printf("{\"head_dim\":%u,\"DPL\":%u,\"bits\":%u,\"tokens\":%u,\"gqa\":%u,\"max_abs_error\":%g,\"mse\":%g}\n",
+                hd, hd / 32, bits, N, gqa, maxabs, mse);
     cf_llama_kv_destroy(a);
     cudaFree(dQ); cudaFree(dOut);
     return maxabs <= 2e-4f ? 0 : 1;
 }
 
 int main() {
-    // Verify the paged-attention kernel is bit-exact to a dequantized reference at BOTH codec widths.
-    return run(4) | run(8);
+    // Verify the warp-cooperative paged-attention kernel is bit-exact to a dequantized reference across every
+    // dispatched instantiation: head_dim in {32,64,96,128} (DPL 1..4, all <= CF_KV_MAX_HEAD_DIM) x codec {int4,int8}.
+    int rc = 0;
+    for (uint32_t hd : {32u, 64u, 96u, 128u})
+        for (uint32_t bits : {4u, 8u}) rc |= run(hd, bits);
+    return rc;
 }
