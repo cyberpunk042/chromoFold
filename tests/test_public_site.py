@@ -44,7 +44,7 @@ def test_pages_preserve_evidence_boundaries() -> None:
     assert "exact-digest" in text.lower() or "exact artifact" in text.lower()
     assert "guaranteed" not in text.lower()
     assert "works on every" not in text.lower()
-    assert "not a benchmark" in text.lower()
+    assert "browser cannot" in text.lower() or "browser planner is advisory" in text.lower()
 
 
 def test_builder_generates_complete_portal() -> None:
@@ -72,6 +72,7 @@ def test_client_runtime_is_safe_and_route_aware() -> None:
     source = (ROOT / "site/app.js").read_text(encoding="utf-8")
     assert "const esc" in source
     assert "qualification_required:true" in source
+    assert 'evidence_level:"estimate"' in source
     assert "renderCompatibility" in source
     assert "renderEvidenceLadder" in source
     assert "navigator.clipboard" in source
