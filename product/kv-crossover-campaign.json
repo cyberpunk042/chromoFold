@@ -1,7 +1,7 @@
 {
   "schema": "chromofold.kv-crossover-campaign.v1",
   "purpose": "Map the workload region where compressed paged attention reaches latency parity with an equally optimized dense-f16 kernel.",
-  "status": "initial-sweep-complete",
+  "status": "initial-sweep-measured",
   "required_repetitions": 5,
   "maximum_cv_pct": 5.0,
   "dimensions": {
@@ -12,6 +12,7 @@
     "code_bits": [4, 8]
   },
   "initial_sweep": {
+    "status": "measured",
     "hardware": "NVIDIA RTX 2080 Ti (sm_75)",
     "query_count": 64,
     "code_bits": 4,
