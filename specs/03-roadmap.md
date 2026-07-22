@@ -380,19 +380,23 @@ ms → 59 ms). Telling detail: N=4096 decode and batch (Qn=256) now take the **s
 are latency-hidden, so the kernel is **throughput-efficient**; the residual ~4.5× is absolute per-token decode cost
 (extraction ALU + word loads + low single-query occupancy), **compute-bound, not bandwidth-bound**. The P1 bandwidth
 crossover needs a regime where KV bandwidth is the true bottleneck (much larger model/context, or a bandwidth-
-starved GPU), which a 0.5B model on a 2080 Ti is not. **P10's "equal-or-better latency" is not met here.** The
-next lever is *not* shared-mem page staging: at N=4096 the Qn=1 (57.9 ms) and Qn=256 (58.3 ms) times are equal, so
-the kernel is bound by a **per-token work chain every thread runs** (extraction ALU + the local-memory
-`query[]`/`weighted[]` arrays — 1536-byte stack frame, 0 spills), not by bandwidth or occupancy; since int4 reads
-few bytes, staging global words into shared memory wouldn't touch the bottleneck. The real next step is a
-**warp-cooperative rewrite** (a warp per query head, `head_dim` split across lanes → per-lane state in registers not
-local memory, QK reduced by shuffle) — a significant, correctness-risky kernel rewrite. It should be
-**evidence-gated by `ncu`**, but performance counters are permission-blocked on this box (`ERR_NVGPUCTRPERM`), so
-that diagnosis can't be confirmed here. Honest bar: capacity/accuracy wins are real; the two landed decode
-optimizations cut latency 5× (24×→4.5×); the rest awaits a warp-cooperative kernel and/or a memory-bound workload.
-Reported (P7).
+starved GPU), which a 0.5B model on a 2080 Ti is not. The latency structure itself was diagnostic (Qn=1 == Qn=256 time ⇒ per-token-work-bound, not bandwidth/occupancy;
+the local `query[]`/`weighted[]` arrays = 1536-byte stack frame), which ruled out shared-mem staging and pointed to
+a **warp-cooperative rewrite** — now **done**: one warp per (query, head), `head_dim` strided across the 32 lanes,
+per-lane state **register-resident** (0-byte stack frame), QK a butterfly-shuffle reduce; templated by
+`head_dim/32`, bit-exact, `paged-kv-seam` green. It is **122× faster** than the original kernel (N=4096 decode 243
+ms → 2.0 ms).
 
-**Remaining for the P10 ship criterion:** (1) the **latency** gap above — now ~4.5× after two M11 optimizations; further
+**The honest latency verdict (P7), against a FAIR baseline.** The first warp run read "4.6× faster than dense" — but
+that dense baseline was the *naive* per-thread kernel. Rebuilt it to be **equally warp-cooperative** (only f16-read
+vs int4-decode differs). Fair result: compressed is **~1.3× slower** (N=4096: 2.53 ms vs dense 1.91 ms) — the
+residual int4 decode compute (shift/mask/scale-mul) dense doesn't pay. So P10's "equal-or-better latency" is **still
+not met — but the gap to a fair dense kernel is now ~1.3×, down from ~24×.** The P1 bandwidth crossover (int4 reads
+4× less) sits just past this workload; it should appear at larger `head_dim`/context or on a bandwidth-starved GPU.
+`ncu` would confirm, but counters are permission-blocked here (`ERR_NVGPUCTRPERM`). Net: capacity + accuracy wins
+are real and measured; latency is now competitive (1.3×) and the honest ceiling is characterized, not spun.
+
+**Remaining for the P10 ship criterion:** (1) the **latency** gap above — now ~1.3× vs a fair dense baseline after the warp-cooperative rewrite; further
 M11 kernel work (or a memory-bound workload where the bandwidth savings dominate) to reach parity; (2) the
 **end-to-end** win — this capacity number is engine-level, but llama still
 allocates its own dense KV in the live path, so the through-runtime win needs replacing llama's KV allocation (not
