@@ -26,15 +26,21 @@ jobs:
         with:
           python-version: "3.12"
       - name: Product and Hub contracts
+        env:
+          BUNDLE_VERSION: ci-${{ github.sha }}
         run: |
+          set -euo pipefail
           make -f product-assistant.mk product-all
-          make -f hub.mk hub-all VERSION="${GITHUB_REF_NAME:-dev}"
+          make -f hub.mk hub-all VERSION="${BUNDLE_VERSION}"
+          test -f "dist/chromofold-${BUNDLE_VERSION}.tar.gz"
+          test -f "dist/chromofold-${BUNDLE_VERSION}.tar.gz.sha256"
+          ls -la dist
       - uses: actions/upload-artifact@v4
         with:
           name: chromofold-hub-${{ github.sha }}
           path: |
-            dist/*.tar.gz
-            dist/*.sha256
+            dist/chromofold-ci-${{ github.sha }}.tar.gz
+            dist/chromofold-ci-${{ github.sha }}.tar.gz.sha256
           if-no-files-found: error
 
   release:
