@@ -1,0 +1,18 @@
+{
+  "schema": "chromofold.release-channel.v1",
+  "channel": "candidate",
+  "latest_version": null,
+  "release_status": "not-published",
+  "artifact_contract": {
+    "archive": "chromofold-<version>.tar.gz",
+    "checksum": "chromofold-<version>.tar.gz.sha256",
+    "sbom": "chromofold-<version>.sbom.spdx.json",
+    "provenance": "chromofold-<version>.provenance.json"
+  },
+  "qualification": {
+    "required_for_rc": true,
+    "required_state": "PASS",
+    "digest_bound": true
+  },
+  "notes": "Candidate releases may be published before workload qualification, but must not be described as production-qualified until exact-digest PASS evidence exists."
+}

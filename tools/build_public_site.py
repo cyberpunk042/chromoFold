@@ -10,6 +10,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site"
 PRODUCT = ROOT / "product"
+PUBLIC_URL = "https://cyberpunk042.github.io/chromoFold/"
 
 
 def load_object(path: Path) -> dict[str, Any]:
@@ -31,16 +32,16 @@ def normalized_downloads(catalog: dict[str, Any]) -> list[dict[str, str]]:
             "name": str(value.get("name") or key),
             "description": str(value.get("description") or value.get("purpose") or "ChromoFold release asset"),
             "status": str(value.get("status") or "candidate"),
-            "href": "https://github.com/cyberpunk042/chromoFold/releases/latest",
-            "action": "Open latest release",
+            "href": "https://github.com/cyberpunk042/chromoFold/releases",
+            "action": "Open releases",
         })
     if not result:
         result.append({
             "name": "ChromoFold product bundle",
             "description": "Local Hub, Assistant, CLI, installers, qualification tools and product registries.",
             "status": "release asset",
-            "href": "https://github.com/cyberpunk042/chromoFold/releases/latest",
-            "action": "Open latest release",
+            "href": "https://github.com/cyberpunk042/chromoFold/releases",
+            "action": "Open releases",
         })
     return result
 
@@ -55,12 +56,14 @@ def build(output: Path) -> dict[str, Any]:
     claims = load_object(PRODUCT / "public-claims.json")
     downloads = load_object(PRODUCT / "downloads.json")
     evidence = load_object(PRODUCT / "evidence-registry.json")
+    release_channel = load_object(PRODUCT / "release-channel.json")
     payload = {
-        "schema": "chromofold.public-site-data.v1",
+        "schema": "chromofold.public-site-data.v2",
         "claims": claims["claims"],
         "claim_boundary": claims["boundary"],
         "downloads": normalized_downloads(downloads),
         "evidence": evidence,
+        "release_channel": release_channel,
         "repository": "https://github.com/cyberpunk042/chromoFold",
     }
     data = "window.CHROMOFOLD_SITE_DATA = " + json.dumps(payload, indent=2, sort_keys=True) + ";\n"
@@ -69,6 +72,15 @@ def build(output: Path) -> dict[str, Any]:
     html = (output / "index.html").read_text(encoding="utf-8")
     html = html.replace('<script src="app.js" defer></script>', '<script src="data.js"></script>\n<script src="app.js" defer></script>')
     (output / "index.html").write_text(html, encoding="utf-8")
+    (output / "404.html").write_text(html, encoding="utf-8")
+    (output / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {PUBLIC_URL}sitemap.xml\n", encoding="utf-8")
+    (output / "sitemap.xml").write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"  <url><loc>{PUBLIC_URL}</loc></url>\n"
+        "</urlset>\n",
+        encoding="utf-8",
+    )
     (output / ".nojekyll").write_text("", encoding="utf-8")
     return {"output": str(output), "files": sorted(path.name for path in output.iterdir())}
 

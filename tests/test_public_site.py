@@ -32,32 +32,35 @@ def test_public_claims_are_explicitly_bounded() -> None:
 
 def test_site_avoids_unqualified_universal_claims() -> None:
     html = (ROOT / "site/index.html").read_text(encoding="utf-8")
-    assert "Every claim below carries an evidence level" in html
-    assert "exact artifact digest" in html
+    assert "Measured results with visible boundaries" in html
+    assert "exact release digest" in html
     assert "guaranteed" not in html.lower()
     assert "works on every" not in html.lower()
+    assert "No values leave the browser" in html
 
 
-def test_builder_generates_self_contained_site() -> None:
+def test_builder_generates_complete_static_site() -> None:
     builder = load("build_public_site", ROOT / "tools/build_public_site.py")
     with tempfile.TemporaryDirectory() as temp:
         output = Path(temp) / "site"
         result = builder.build(output)
         assert result["output"] == str(output)
-        for name in ("index.html", "styles.css", "app.js", "data.js", ".nojekyll"):
+        for name in ("index.html", "404.html", "styles.css", "app.js", "data.js", "robots.txt", "sitemap.xml", ".nojekyll"):
             assert (output / name).is_file()
         html = (output / "index.html").read_text(encoding="utf-8")
         assert '<script src="data.js"></script>' in html
         data = (output / "data.js").read_text(encoding="utf-8")
-        assert "chromofold.public-site-data.v1" in data
+        assert "chromofold.public-site-data.v2" in data
+        assert "release_channel" in data
         assert "public-claims" not in data
 
 
-def test_estimator_is_labeled_advisory() -> None:
+def test_estimator_is_labeled_advisory_and_escapes_output() -> None:
     source = (ROOT / "site/app.js").read_text(encoding="utf-8")
     assert 'evidence_level: "estimate"' in source
     assert "not a benchmark" in source
-    assert "hardware qualification" in source
+    assert "qualification_required: true" in source
+    assert "function esc" in source
 
 
 def test_manual_dispatch_deploys_pages() -> None:
@@ -71,7 +74,7 @@ def test_manual_dispatch_deploys_pages() -> None:
 if __name__ == "__main__":
     test_public_claims_are_explicitly_bounded()
     test_site_avoids_unqualified_universal_claims()
-    test_builder_generates_self_contained_site()
-    test_estimator_is_labeled_advisory()
+    test_builder_generates_complete_static_site()
+    test_estimator_is_labeled_advisory_and_escapes_output()
     test_manual_dispatch_deploys_pages()
     print("ChromoFold public site tests: PASS")
