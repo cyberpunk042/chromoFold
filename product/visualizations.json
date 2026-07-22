@@ -1,0 +1,81 @@
+{
+  "schema": "chromofold.visualizations.v1",
+  "charts": [
+    {
+      "id": "memory-footprint",
+      "title": "Physical memory remaining after compression",
+      "description": "Normalized against an equivalent uncompressed baseline of 100%. Lower is better. Values are derived from published reduction factors and are not new measurements.",
+      "type": "horizontal-bar",
+      "unit": "% of baseline",
+      "lower_is_better": true,
+      "evidence_level": "measured-derived",
+      "items": [
+        {
+          "label": "Shared-prefix workload",
+          "value": 4.0,
+          "display": "4%",
+          "derived_from": "25× less memory",
+          "hardware": "reference benchmark environment",
+          "scope": "256 near-identical requests"
+        },
+        {
+          "label": "Fused matrix working set",
+          "value": 9.4,
+          "display": "9.4%",
+          "derived_from": "10.6× less working VRAM",
+          "hardware": "NVIDIA RTX 2080 Ti",
+          "scope": "large-size kernel benchmark region"
+        },
+        {
+          "label": "Compressed KV attention",
+          "value": 12.5,
+          "display": "~12–13%",
+          "derived_from": "7.7–8.3× less KV memory",
+          "hardware": "NVIDIA RTX 2080 Ti",
+          "scope": "kernel benchmark; midpoint shown for visualization"
+        },
+        {
+          "label": "Uncompressed baseline",
+          "value": 100.0,
+          "display": "100%",
+          "derived_from": "normalization reference",
+          "hardware": "not applicable",
+          "scope": "visual reference only"
+        }
+      ]
+    },
+    {
+      "id": "measured-speedups",
+      "title": "Measured speedup in direct-access workloads",
+      "description": "Relative speedup versus the comparison path reported by each benchmark. These workloads and baselines are different and should not be combined into a single product-wide speed claim.",
+      "type": "horizontal-bar",
+      "unit": "× speedup",
+      "lower_is_better": false,
+      "evidence_level": "measured",
+      "items": [
+        {
+          "label": "GPU suffix-array construction",
+          "value": 22.0,
+          "display": "21–23×",
+          "derived_from": "reported range midpoint",
+          "hardware": "repository benchmark environment",
+          "scope": "GPU versus CPU construction"
+        },
+        {
+          "label": "Sparse direct gather",
+          "value": 18.0,
+          "display": "up to ~18×",
+          "derived_from": "reported maximum",
+          "hardware": "NVIDIA RTX 2080 Ti",
+          "scope": "sparse region versus full decompression"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    "A chart must not create a stronger claim than its source registry entry.",
+    "Derived values must state the formula or source factor.",
+    "Ranges must remain ranges in visible labels even when a midpoint is used for bar geometry.",
+    "Different benchmark baselines must not be presented as directly interchangeable."
+  ]
+}
