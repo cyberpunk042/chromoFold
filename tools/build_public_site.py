@@ -13,9 +13,9 @@ PRODUCT = ROOT / "product"
 PUBLIC_URL = "https://cyberpunk042.github.io/chromoFold/"
 PAGES = (
     "index.html", "technology.html", "evidence.html", "compatibility.html",
-    "start.html", "workbench.html", "releases.html", "contribute.html",
+    "start.html", "workbench.html", "sessions.html", "releases.html", "contribute.html",
 )
-ASSETS = ("styles.css", "app.js", "workbench.js", "workbench.css")
+ASSETS = ("styles.css", "app.js", "workbench.js", "workbench.css", "sessions.js", "sessions.css")
 
 
 def load_object(path: Path) -> dict[str, Any]:
@@ -61,7 +61,7 @@ def build(output: Path) -> dict[str, Any]:
 
     claims = load_object(PRODUCT / "public-claims.json")
     payload = {
-        "schema": "chromofold.public-site-data.v5",
+        "schema": "chromofold.public-site-data.v6",
         "claims": claims["claims"],
         "claim_boundary": claims["boundary"],
         "downloads": normalized_downloads(load_object(PRODUCT / "downloads.json")),
@@ -72,6 +72,7 @@ def build(output: Path) -> dict[str, Any]:
         "portal": load_object(PRODUCT / "portal.json"),
         "kv_scaling": load_object(PRODUCT / "kv-scaling.json"),
         "evidence_result_schema": load_object(PRODUCT / "evidence-result.schema.json"),
+        "qualification_session_schema": load_object(PRODUCT / "qualification-session.schema.json"),
         "repository": "https://github.com/cyberpunk042/chromoFold",
     }
     (output / "data.js").write_text(
