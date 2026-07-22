@@ -371,10 +371,20 @@ err); moving it needs a non-uniform/vector quantizer, not scales or entropy codi
 (`cudaMemGetInfo`) of a populated `CompressedKvCache` vs dense f16 (4096 tokens, Qwen2.5-0.5B dims): **int4 fits
 2.67× more context at equal VRAM** (18 MB vs 48 MB; 3.21× logical, 1.20× alloc overhead), int8 1.60×.
 
-**Remaining for the P10 ship criterion:** the **end-to-end** win — this capacity number is engine-level; llama still
+**Latency — the other half of P10, measured, and an HONEST NEGATIVE** (`make -f m9-gpu.mk gpu-latency`). Racing the
+verified paged kernel over real int4 pages against a fair dense-f16 kernel (identical online-softmax, only the read
+differs): compressed is **~20-25× SLOWER** everywhere (e.g. N=4096, decode: 243 ms vs 10.7 ms). The P1 bandwidth
+crossover does **not** appear — the decode-inline path is compute-bound (per-element serial bit reads + LUT
+lookups, uncoalesced, low occupancy), and it dominates. So **P10's "equal-or-better latency" is not met by the
+current kernel**: the 2.67× capacity win costs ~20× latency today. This is a correctness-first kernel; closing the
+gap (shared-mem page staging, coalesced/vectorized decode, higher occupancy) is exactly the **M11** work, and this
+bench is its evidence gate. Reported, not buried (P7).
+
+**Remaining for the P10 ship criterion:** (1) the **latency** gap above — an optimized decode kernel (M11) so the
+capacity win doesn't cost ~20×; (2) the **end-to-end** win — this capacity number is engine-level, but llama still
 allocates its own dense KV in the live path, so the through-runtime win needs replacing llama's KV allocation (not
-exposed on this system) — plus a **latency** measurement and **multi-ubatch/sequence-management** robustness
-(current position-alignment covers single-ubatch `initial_support`).
+exposed on this system); (3) **multi-ubatch/sequence-management** robustness (current alignment covers single-ubatch
+`initial_support`).
 
 ## M10 — Rust wrapper (only now)
 **Goal.** Add the Rust safe-systems layer (parsing, integrity, mmap, corpus, CLI, server glue) over the C ABI —
