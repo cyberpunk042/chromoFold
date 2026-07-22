@@ -38,6 +38,15 @@
       "evidence_level": "measured"
     },
     {
+      "id": "kv-native-latency",
+      "name": "Native compressed KV latency",
+      "result": "~1.3× slower than fair dense",
+      "meaning": "The warp-cooperative kernel is 122× faster than the original decoder, but does not yet beat an equally optimized dense-f16 kernel on the measured workload.",
+      "hardware": "NVIDIA RTX 2080 Ti",
+      "scope": "Qwen2.5-0.5B dimensions; N=4096; engine-level fair warp-cooperative comparison",
+      "evidence_level": "measured"
+    },
+    {
       "id": "sparse-gather",
       "name": "Sparse direct access",
       "result": "up to ~18× faster",
@@ -56,5 +65,5 @@
       "evidence_level": "measured"
     }
   ],
-  "boundary": "These are repository benchmark claims, not a universal prediction. Production claims require exact-workload PASS evidence and independent reproduction."
+  "boundary": "These are repository benchmark claims, not a universal prediction. Production claims require exact-workload PASS evidence and independent reproduction. Optimization speedup over an older ChromoFold kernel is never presented as a win over a fair dense baseline."
 }
