@@ -4,7 +4,7 @@ CXX ?= g++
 BUILD ?= build
 COMMON_NVCC = -O2 -std=c++17 -arch=$(ARCH) -Iinclude -lineinfo -Xcompiler=-Wall,-Wextra,-Werror
 
-.PHONY: gpu-fixture-test gpu-correctness gpu-cache-roundtrip gpu-adapter-attention gpu-quantizer-frontier gpu-capacity gpu-sanitize gpu-benchmark gpu-validation-clean
+.PHONY: gpu-fixture-test gpu-correctness gpu-cache-roundtrip gpu-adapter-attention gpu-quantizer-frontier gpu-capacity gpu-latency gpu-sanitize gpu-benchmark gpu-validation-clean
 
 gpu-fixture-test:
 	@mkdir -p $(BUILD)
@@ -62,6 +62,18 @@ $(BUILD)/capacity_proof:
 # more context fits at equal memory. int4 ~2.67x (real) on Qwen2.5-0.5B dims; honest about alloc overhead.
 gpu-capacity: $(BUILD)/capacity_proof
 	$(BUILD)/capacity_proof
+
+$(BUILD)/latency_bench:
+	@mkdir -p $(BUILD)
+	$(NVCC) $(COMMON_NVCC) tests/latency_bench.cu \
+		src/runtime/compressed_kv_cache.cu src/runtime/kv_gpu_fixture.cpp \
+		src/cuda/kv_cuda_owner.cu src/cuda/paged_kv_attention.cu -o $@
+
+# P10 latency (the OTHER half): compressed int4 paged attention vs a fair dense-f16 kernel. HONEST NEGATIVE --
+# the decode-inline kernel is ~20x SLOWER (compute-bound); capacity win costs latency until the kernel is
+# optimized (shared-mem page staging, coalesced/vectorized decode) -- the evidence gate for M11.
+gpu-latency: $(BUILD)/latency_bench
+	$(BUILD)/latency_bench
 
 gpu-sanitize: $(BUILD)/paged_kv_cuda_correctness
 	compute-sanitizer --tool memcheck --error-exitcode 1 $(BUILD)/paged_kv_cuda_correctness
