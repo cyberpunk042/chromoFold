@@ -1,0 +1,1 @@
+{"appended_tokens":1344,"sealed_tokens":0,"sealed_pages":0,"active_tokens":1344,"dense_active_bytes":688128,"compressed_bytes":0,"descriptor_bytes":0,"append_errors":0,"nonfinite":0,"head_dim":64,"kv_heads":2,"query_heads":14,"max_append_T":5,"compressed_attention_launches":600,"attn_errors":0,"attn_max_diff":0.0103998,"attn_mean_diff":0.000139075}

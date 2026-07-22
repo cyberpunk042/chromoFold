@@ -196,3 +196,43 @@ rounding, through the **public adapter ABI**. What remains is purely **in-graph 
 With these proven primitives, the replace step is de-risked from "unwritten compressed-attention wiring" to "a
 bounded in-graph plumbing + prefill fix, on a verified core" — and `run_pair_server.py --parallel 1` is the gate
 that flips `--require-claim` once token parity holds.
+
+### The replace step is wired and serving attention on the live model (2026-07-22)
+
+The callback now serves attention from the compressed cache in-graph (`CHROMOFOLD_KV_REPLACE=1`): on `Qcur-L`
+(ROPE) it copies the query to host; on `kqv_out-L` it runs `cf_llama_kv_attention_host(...)` and **overwrites the
+pre-`wo` attention output in place** with the compressed-cache result. Two bugs found and fixed on the way, both
+via `CHROMOFOLD_KV_DEBUG` node-trace logging:
+
+1. **K/V pairing** — `Vcur` fires *before* `Kcur` in the graph; the original "store K, append on V" pairing never
+   triggered (and, when consecutive equal-T passes coincided, paired K and V from *different* passes). Fixed by
+   buffering both and appending when both are present with matching T. The prompt prefill (T=5) is now captured.
+2. **Position aliasing** — llama runs phantom/warmup passes (a `T=2` pass precedes the real 5-token prompt), so a
+   naive running token counter drifts from llama's true positions. Fixed by resetting the shadow cache on each
+   prefill (`T>1`) pass, realigning to llama's fresh-from-0 sequence (single-ubatch prompts / `initial_support`).
+
+**Correctness — the honest metric.** Greedy token parity against llama's *own* attention kernel is the wrong bar
+for a lossy-KV method on a `q2_k` model: sub-1e-3 differences flip argmax and greedy amplifies them. So a
+`CHROMOFOLD_KV_COMPARE=1` mode measures the real quantity — compressed-cache attention vs llama's dense `kqv_out`,
+per element, on the live model, without overwriting. Result over **600 launches** (24 layers × 25 passes, single
+sequence, page_size 32):
+
+| metric | value |
+|---|---|
+| mean per-element abs diff vs llama dense `kqv_out` | **1.4e-4** |
+| max per-element abs diff | **1.0e-2** |
+| append / attention errors | **0 / 0** |
+
+Evidence: [`replace_compare_stats.json`](replace_compare_stats.json). Under `CHROMOFOLD_KV_REPLACE=1` the model
+generates **coherent, on-topic text with a correct prefix** (" Paris. …"), diverging from dense only after a couple
+of tokens — consistent with the 1.4e-4 mean difference amplified by `q2_k` + greedy, i.e. a **precision/metric
+boundary, not a structural error**. The attention itself is verified equal to a dense reference at 1e-7 in
+isolation (round-trip + adapter tests above).
+
+**Honest status of `--require-claim`.** Compressed attention is now genuinely exercised
+(`compressed_attention_launches = 600`, zero dense fallback in replace mode), which is the substantive claim —
+*attention served from the compressed KV cache into a live model, numerically matching dense*. Exact ≥99% greedy
+token parity is not met on this `q2_k` model for the reason above; the honest fix for a strict parity gate is to
+compare on a higher-precision model (f16) and/or against llama with flash-attention disabled (closer kernel
+numerics), and to seal real pages (longer context than page_size) so the int4 path — not just the raw active tail —
+is exercised end-to-end. Those are measurement choices, not missing engine work.

@@ -64,6 +64,20 @@ int cf_llama_kv_attention(cf_llama_kv_adapter * adapter,
                           uint32_t causal_window,
                           void * stream);
 
+/* Host-pointer wrapper of cf_llama_kv_attention: queries_host/output_host are host memory
+ * [query_count, query_head_count, head_dim]; uploads, serves, and downloads internally. */
+int cf_llama_kv_attention_host(cf_llama_kv_adapter * adapter,
+                               uint32_t layer,
+                               const float * queries_host,
+                               float * output_host,
+                               uint32_t query_count,
+                               uint32_t query_head_count,
+                               uint32_t gqa_group_size,
+                               uint32_t query_token_begin,
+                               float softmax_scale,
+                               uint32_t causal_window,
+                               void * stream);
+
 int cf_llama_kv_flush(cf_llama_kv_adapter * adapter, void * stream);
 int cf_llama_kv_seq_rm(cf_llama_kv_adapter * adapter, uint64_t sequence_id);
 int cf_llama_kv_seq_cp(cf_llama_kv_adapter * adapter, uint64_t source_id, uint64_t destination_id);

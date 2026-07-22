@@ -49,10 +49,24 @@ struct cf_cb_state {
     uint32_t head_dim = 0, kv_heads = 0, page_size = 32;
     static const int MAXL = 128;
     std::vector<float> pend_k[MAXL];
+    std::vector<float> pend_v[MAXL];
     uint32_t pend_k_T[MAXL] = {0};
+    uint32_t pend_v_T[MAXL] = {0};
     uint32_t tok_begin[MAXL] = {0};
     unsigned long long append_errors = 0, nonfinite = 0;
     std::string stats_path;
+    // replace mode: serve attention from the compressed cache and overwrite kqv_out
+    bool replace_on = false;
+    uint32_t query_heads = 0;
+    std::vector<float> q_host[MAXL];
+    uint32_t q_count[MAXL] = {0};
+    unsigned long long attn_launches = 0, attn_errors = 0;
+    uint32_t max_append_T = 0;
+    bool compare_on = false;
+    double attn_max_diff = 0.0, attn_sum_diff = 0.0;
+    unsigned long long attn_diff_count = 0;
+    std::string debug_path;
+    unsigned dbg = 0;
 #endif
     std::mutex m;
 };
@@ -76,16 +90,27 @@ void cf_write_stats(cf_cb_state * s) {
     std::fprintf(f,
         "{\"appended_tokens\":%llu,\"sealed_tokens\":%llu,\"sealed_pages\":%llu,\"active_tokens\":%llu,"
         "\"dense_active_bytes\":%llu,\"compressed_bytes\":%llu,\"descriptor_bytes\":%llu,"
-        "\"append_errors\":%llu,\"nonfinite\":%llu,\"head_dim\":%u,\"kv_heads\":%u}\n",
+        "\"append_errors\":%llu,\"nonfinite\":%llu,\"head_dim\":%u,\"kv_heads\":%u,"
+        "\"query_heads\":%u,\"max_append_T\":%u,\"compressed_attention_launches\":%llu,\"attn_errors\":%llu,"
+        "\"attn_max_diff\":%g,\"attn_mean_diff\":%g}\n",
         (unsigned long long) st.appended_tokens, (unsigned long long) st.sealed_tokens,
         (unsigned long long) st.sealed_pages, (unsigned long long) st.active_tokens,
         (unsigned long long) st.dense_active_bytes, (unsigned long long) st.compressed_bytes,
-        (unsigned long long) st.descriptor_bytes, s->append_errors, s->nonfinite, s->head_dim, s->kv_heads);
+        (unsigned long long) st.descriptor_bytes, s->append_errors, s->nonfinite, s->head_dim, s->kv_heads,
+        s->query_heads, s->max_append_T, s->attn_launches, s->attn_errors,
+        s->attn_max_diff, s->attn_diff_count ? s->attn_sum_diff / (double) s->attn_diff_count : 0.0);
     std::fclose(f);
 }
 
 // Append one layer's paired K,V (raw contiguous [dim, kv_head, token]) into the adapter, per kv head.
 void cf_append_layer(cf_cb_state * s, int L, const std::vector<float> & k, const std::vector<float> & v, uint32_t T) {
+    // A prefill pass (T>1) at layer 0 marks a fresh sequence: llama re-evaluates from position 0, so reset the
+    // shadow cache to stay position-aligned (drops any phantom/warmup passes). Single-ubatch prompts only
+    // (initial_support scope); a multi-ubatch prompt would need llama's real positions instead.
+    if (T > 1 && L == 0) {
+        cf_llama_kv_clear(s->adapter);
+        for (int i = 0; i < cf_cb_state::MAXL; ++i) s->tok_begin[i] = 0;
+    }
     const uint32_t hd = s->head_dim, kvh = s->kv_heads, wide = hd * kvh;
     std::vector<float> kh(T * hd), vh(T * hd);
     for (uint32_t h = 0; h < kvh; ++h) {
@@ -100,6 +125,7 @@ void cf_append_layer(cf_cb_state * s, int L, const std::vector<float> & k, const
         }
     }
     s->tok_begin[L] += T;
+    if (T > s->max_append_T) s->max_append_T = T;
     cf_write_stats(s);
 }
 #endif
@@ -122,6 +148,12 @@ extern "C" void * chromofold_kv_map_state_create(void) {
     if (ps != nullptr && ps[0] != '\0') { int p = std::atoi(ps); if (p > 0) s->page_size = (uint32_t) p; }
     const char * sp = std::getenv("CHROMOFOLD_KV_STATS_PATH");
     if (sp != nullptr && sp[0] != '\0') { s->stats_path = sp; std::remove(sp); }
+    const char * rp = std::getenv("CHROMOFOLD_KV_REPLACE");
+    s->replace_on = append_on && rp != nullptr && rp[0] == '1';
+    const char * cp = std::getenv("CHROMOFOLD_KV_COMPARE");
+    s->compare_on = append_on && cp != nullptr && cp[0] == '1';
+    const char * dp = std::getenv("CHROMOFOLD_KV_DEBUG");
+    if (dp != nullptr && dp[0] != '\0') { s->debug_path = dp; std::remove(dp); }
 #endif
     return s;
 }
@@ -147,6 +179,22 @@ extern "C" bool chromofold_kv_cb_eval(struct ggml_tensor * t, bool ask, void * u
 
 #ifdef GGML_CHROMOFOLD
     if (s->append_on && !s->disabled) {
+        if (!s->debug_path.empty() && s->dbg < 4000) {
+            const char * nm = t->name;
+            const bool k0 = (t->op == GGML_OP_ROPE && cf_layer_of(nm, "Kcur-") == 0);
+            const bool o0 = (cf_layer_of(nm, "kqv_out-") == 0);
+            if (k0 || o0) {
+                std::lock_guard<std::mutex> lk(s->m);
+                ++s->dbg;
+                FILE * f = std::fopen(s->debug_path.c_str(), "a");
+                if (f != nullptr) {
+                    std::fprintf(f, "%-12s op=%-8s ne=[%lld,%lld,%lld,%lld] tok_begin=%u\n", nm, ggml_op_desc(t),
+                                 (long long) t->ne[0], (long long) t->ne[1], (long long) t->ne[2], (long long) t->ne[3],
+                                 s->tok_begin[0]);
+                    std::fclose(f);
+                }
+            }
+        }
         // Match the final per-layer K (RoPE'd) and V (reshaped): [head_dim, kv_heads, tokens] f32, contiguous.
         int kL = (t->op == GGML_OP_ROPE)    ? cf_layer_of(t->name, "Kcur-") : -1;
         int vL = (t->op == GGML_OP_RESHAPE) ? cf_layer_of(t->name, "Vcur-") : -1;
@@ -168,12 +216,63 @@ extern "C" bool chromofold_kv_cb_eval(struct ggml_tensor * t, bool ask, void * u
                 if (!s->disabled && hd == s->head_dim && kvh == s->kv_heads) {
                     std::vector<float> buf;
                     if (cf_extract(t, buf, s->nonfinite)) {
+                        // Kcur (ROPE) and Vcur (RESHAPE) fire in either order per pass; buffer both and append
+                        // the pair once both are present with matching T, so K and V come from the SAME pass.
                         if (kL >= 0) { s->pend_k[L] = std::move(buf); s->pend_k_T[L] = T; }
-                        else if (s->pend_k_T[L] == T && !s->pend_k[L].empty()) {
-                            cf_append_layer(s, L, s->pend_k[L], buf, T);
-                            s->pend_k[L].clear(); s->pend_k_T[L] = 0;
+                        else { s->pend_v[L] = std::move(buf); s->pend_v_T[L] = T; }
+                        if (!s->pend_k[L].empty() && !s->pend_v[L].empty() && s->pend_k_T[L] == s->pend_v_T[L]) {
+                            cf_append_layer(s, L, s->pend_k[L], s->pend_v[L], s->pend_k_T[L]);
+                            s->pend_k[L].clear(); s->pend_v[L].clear();
+                            s->pend_k_T[L] = 0; s->pend_v_T[L] = 0;
                         }
                     }
+                }
+            }
+        }
+
+        // Replace step: capture the RoPE'd query, then overwrite kqv_out with compressed-cache attention.
+        if ((s->replace_on || s->compare_on) && t->op == GGML_OP_ROPE && t->type == GGML_TYPE_F32 &&
+            t->ne[3] == 1 && t->ne[0] > 0) {
+            int qL = cf_layer_of(t->name, "Qcur-");
+            if (qL >= 0 && qL < cf_cb_state::MAXL) {
+                std::lock_guard<std::mutex> lk(s->m);
+                s->query_heads = (uint32_t) t->ne[1];
+                s->q_count[qL] = (uint32_t) t->ne[2];
+                s->q_host[qL].resize(static_cast<std::size_t>(t->ne[0]) * t->ne[1] * t->ne[2]);
+                ggml_backend_tensor_get(t, s->q_host[qL].data(), 0, s->q_host[qL].size() * sizeof(float));
+            }
+        }
+        if ((s->replace_on || s->compare_on) && s->adapter != nullptr && s->query_heads > 0 && s->head_dim > 0 &&
+            s->kv_heads > 0 && s->query_heads % s->kv_heads == 0 && t->type == GGML_TYPE_F32 &&
+            t->ne[3] == 1 && t->ne[2] == 1) {
+            int oL = cf_layer_of(t->name, "kqv_out-");
+            if (oL >= 0 && oL < cf_cb_state::MAXL) {
+                const uint32_t T = (uint32_t) t->ne[1];
+                std::lock_guard<std::mutex> lk(s->m);
+                if (s->q_count[oL] == T && !s->q_host[oL].empty() && s->tok_begin[oL] >= T &&
+                    (uint32_t) t->ne[0] == s->query_heads * s->head_dim) {
+                    const uint32_t gqa = s->query_heads / s->kv_heads;
+                    const uint32_t qtb = s->tok_begin[oL] - T;
+                    const float scale = 1.0f / std::sqrt((float) s->head_dim);
+                    std::vector<float> out(static_cast<std::size_t>(T) * s->query_heads * s->head_dim);
+                    if (cf_llama_kv_attention_host(s->adapter, (uint32_t) oL, s->q_host[oL].data(), out.data(),
+                                                   T, s->query_heads, gqa, qtb, scale, 0, nullptr) == 0) {
+                        ++s->attn_launches;
+                        if (s->compare_on) {  // measure vs llama's own (dense) kqv_out before any overwrite
+                            std::vector<float> ref(out.size());
+                            ggml_backend_tensor_get(t, ref.data(), 0, ref.size() * sizeof(float));
+                            for (std::size_t i = 0; i < out.size(); ++i) {
+                                const double e = std::fabs((double) out[i] - (double) ref[i]);
+                                if (e > s->attn_max_diff) s->attn_max_diff = e;
+                                s->attn_sum_diff += e;
+                            }
+                            s->attn_diff_count += out.size();
+                        }
+                        if (s->replace_on) ggml_backend_tensor_set(t, out.data(), 0, out.size() * sizeof(float));
+                    } else {
+                        ++s->attn_errors;
+                    }
+                    cf_write_stats(s);
                 }
             }
         }

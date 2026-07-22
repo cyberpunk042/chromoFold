@@ -3,10 +3,13 @@
 #include "chromofold/compressed_kv_cache.hpp"
 #include "chromofold/kv_cuda.h"
 
+#include <cuda_runtime.h>
+
 #include <exception>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 struct cf_llama_kv_adapter {
     std::unique_ptr<chromofold::CompressedKvCache> cache;
@@ -122,6 +125,46 @@ extern "C" int cf_llama_kv_attention(cf_llama_kv_adapter* adapter,
         if (cf_kv_paged_attention_async(&desc, stream) != CF_OK) {
             throw std::runtime_error("ChromoFold paged attention launch rejected");
         }
+    });
+}
+
+// Host-pointer convenience wrapper: uploads the queries, serves attention from the compressed cache, and
+// downloads the result. queries_host/output_host are [query_count, query_head_count, head_dim] on the host.
+// Lets a host-only caller (the ggml graph-eval callback) drive the replace without touching CUDA directly.
+extern "C" int cf_llama_kv_attention_host(cf_llama_kv_adapter* adapter,
+                                          uint32_t layer,
+                                          const float* queries_host,
+                                          float* output_host,
+                                          uint32_t query_count,
+                                          uint32_t query_head_count,
+                                          uint32_t gqa_group_size,
+                                          uint32_t query_token_begin,
+                                          float softmax_scale,
+                                          uint32_t causal_window,
+                                          void* stream) {
+    return guarded(adapter, [&] {
+        if (queries_host == nullptr || output_host == nullptr) {
+            throw std::invalid_argument("null host attention buffer");
+        }
+        const std::size_t n = static_cast<std::size_t>(query_count) * query_head_count * adapter->head_dim;
+        const std::size_t bytes = n * sizeof(float);
+        float* dq = nullptr;
+        float* dout = nullptr;
+        if (cudaMalloc(reinterpret_cast<void**>(&dq), bytes) != cudaSuccess ||
+            cudaMalloc(reinterpret_cast<void**>(&dout), bytes) != cudaSuccess) {
+            if (dq != nullptr) cudaFree(dq);
+            throw std::runtime_error("failed to allocate attention scratch");
+        }
+        cudaMemcpy(dq, queries_host, bytes, cudaMemcpyHostToDevice);
+        int rc = cf_llama_kv_attention(adapter, layer, dq, dout, query_count, query_head_count,
+                                       gqa_group_size, query_token_begin, softmax_scale, causal_window, stream);
+        if (rc == 0) {
+            cudaStreamSynchronize(static_cast<cudaStream_t>(stream));
+            cudaMemcpy(output_host, dout, bytes, cudaMemcpyDeviceToHost);
+        }
+        cudaFree(dq);
+        cudaFree(dout);
+        if (rc != 0) throw std::runtime_error(adapter->last_error.empty() ? "attention failed" : adapter->last_error);
     });
 }
 
