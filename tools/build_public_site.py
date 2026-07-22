@@ -77,6 +77,13 @@ def build(output: Path) -> dict[str, Any]:
         encoding="utf-8",
     )
 
+    for page in PAGES:
+        path = output / page
+        html = path.read_text(encoding="utf-8")
+        if '<script src="data.js"></script>' not in html:
+            html = html.replace('<script src="app.js" defer></script>', '<script src="data.js"></script>\n<script src="app.js" defer></script>')
+        path.write_text(html, encoding="utf-8")
+
     index = (output / "index.html").read_text(encoding="utf-8")
     (output / "404.html").write_text(index, encoding="utf-8")
     (output / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {PUBLIC_URL}sitemap.xml\n", encoding="utf-8")
