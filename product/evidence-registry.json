@@ -1,0 +1,24 @@
+{
+  "schema": "chromofold.evidence-registry.v1",
+  "levels": [
+    {"id": "developer-reported", "meaning": "Produced by a contributor on disclosed hardware"},
+    {"id": "ci-reproduced", "meaning": "Reproduced by an automated workflow with retained artifacts"},
+    {"id": "maintainer-qualified", "meaning": "Passed the RC1 hardware qualification gate"},
+    {"id": "independently-reproduced", "meaning": "Reproduced by an unaffiliated operator"}
+  ],
+  "publication_requirements": [
+    "hardware and software fingerprint",
+    "baseline and candidate commands",
+    "model and artifact digests",
+    "raw result JSON",
+    "redacted incident bundle",
+    "PASS, FAIL or INCOMPLETE qualification decision",
+    "negative and regressed metrics retained"
+  ],
+  "claims_policy": {
+    "estimated": "Must be labeled estimate and cannot be presented as measured",
+    "measured": "Must identify hardware, workload and baseline",
+    "qualified": "Requires validated PASS evidence",
+    "independent": "Requires unaffiliated reproduction artifacts"
+  }
+}

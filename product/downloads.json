@@ -1,0 +1,30 @@
+{
+  "schema": "chromofold.downloads.v1",
+  "release_channel": "candidate",
+  "bundles": [
+    {
+      "id": "llama-cpp-linux-nvidia",
+      "name": "ChromoFold for llama.cpp — Linux NVIDIA",
+      "status": "candidate",
+      "contents": ["libchromofold.so", "headers", "runtime adapter", "configurator", "qualification harness", "SBOM", "checksums"],
+      "requirements": ["Linux x86_64", "NVIDIA CUDA GPU", "CUDA 12.x", "compatible llama.cpp patch"],
+      "qualification": "User must run smoke qualification before production use"
+    },
+    {
+      "id": "qualification-kit",
+      "name": "ChromoFold benchmark and qualification kit",
+      "status": "candidate",
+      "contents": ["hardware inspector", "baseline runner", "ChromoFold runner", "evidence schema", "incident bundle tools"],
+      "requirements": ["Python 3.12", "NVIDIA driver for GPU evidence"],
+      "qualification": "Produces PASS, FAIL or INCOMPLETE; never assumes success"
+    },
+    {
+      "id": "sdk",
+      "name": "ChromoFold native SDK",
+      "status": "experimental",
+      "contents": ["C ABI", "C++ headers", "examples", "conformance tests"],
+      "requirements": ["C++20 toolchain", "CUDA toolkit for GPU kernels"],
+      "qualification": "Integration-specific qualification required"
+    }
+  ]
+}
