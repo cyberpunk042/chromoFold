@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cyberpunk042.github.io/chromoFold/schemas/qualification-session.v1.json",
+  "title": "ChromoFold qualification session",
+  "type": "object",
+  "required": ["schema", "session_id", "baseline_runs", "candidate_runs"],
+  "properties": {
+    "schema": {"const": "chromofold.qualification-session.v1"},
+    "session_id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string"},
+    "notes": {"type": "string"},
+    "baseline_runs": {"type": "array", "minItems": 3, "items": {"$ref": "evidence-result.schema.json"}},
+    "candidate_runs": {"type": "array", "minItems": 3, "items": {"$ref": "evidence-result.schema.json"}},
+    "attachments": {"type": "array", "items": {"type": "object", "required": ["name", "sha256"], "properties": {"name": {"type": "string"}, "sha256": {"type": "string"}, "description": {"type": "string"}}}}
+  },
+  "additionalProperties": false
+}

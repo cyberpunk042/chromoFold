@@ -1,0 +1,15 @@
+{
+  "schema": "chromofold.qualification-session.v1",
+  "session_id": "example-session",
+  "notes": "Synthetic contract fixture; not a public benchmark.",
+  "baseline_runs": [
+    {"schema":"chromofold.evidence-result.v1","role":"baseline","fingerprint":{"model":"Qwen2.5-0.5B","runtime":"llama.cpp@example","hardware":"NVIDIA RTX 2080 Ti","workload":"context-32768-concurrency-1","release_digest":null},"metrics":{"throughput_tokens_s":42.0,"latency_p50_ms":24.0,"latency_p95_ms":31.0,"peak_vram_mib":8210,"capacity_tokens":32768,"correctness":true}},
+    {"schema":"chromofold.evidence-result.v1","role":"baseline","fingerprint":{"model":"Qwen2.5-0.5B","runtime":"llama.cpp@example","hardware":"NVIDIA RTX 2080 Ti","workload":"context-32768-concurrency-1","release_digest":null},"metrics":{"throughput_tokens_s":41.8,"latency_p50_ms":24.2,"latency_p95_ms":31.4,"peak_vram_mib":8220,"capacity_tokens":32768,"correctness":true}},
+    {"schema":"chromofold.evidence-result.v1","role":"baseline","fingerprint":{"model":"Qwen2.5-0.5B","runtime":"llama.cpp@example","hardware":"NVIDIA RTX 2080 Ti","workload":"context-32768-concurrency-1","release_digest":null},"metrics":{"throughput_tokens_s":42.2,"latency_p50_ms":23.9,"latency_p95_ms":30.8,"peak_vram_mib":8204,"capacity_tokens":32768,"correctness":true}}
+  ],
+  "candidate_runs": [
+    {"schema":"chromofold.evidence-result.v1","role":"candidate","fingerprint":{"model":"Qwen2.5-0.5B","runtime":"llama.cpp@example","hardware":"NVIDIA RTX 2080 Ti","workload":"context-32768-concurrency-1","release_digest":"sha256:example-only"},"metrics":{"throughput_tokens_s":44.0,"latency_p50_ms":25.0,"latency_p95_ms":32.5,"peak_vram_mib":4920,"capacity_tokens":65536,"correctness":true}},
+    {"schema":"chromofold.evidence-result.v1","role":"candidate","fingerprint":{"model":"Qwen2.5-0.5B","runtime":"llama.cpp@example","hardware":"NVIDIA RTX 2080 Ti","workload":"context-32768-concurrency-1","release_digest":"sha256:example-only"},"metrics":{"throughput_tokens_s":44.3,"latency_p50_ms":25.1,"latency_p95_ms":32.8,"peak_vram_mib":4910,"capacity_tokens":65536,"correctness":true}},
+    {"schema":"chromofold.evidence-result.v1","role":"candidate","fingerprint":{"model":"Qwen2.5-0.5B","runtime":"llama.cpp@example","hardware":"NVIDIA RTX 2080 Ti","workload":"context-32768-concurrency-1","release_digest":"sha256:example-only"},"metrics":{"throughput_tokens_s":43.9,"latency_p50_ms":24.9,"latency_p95_ms":32.4,"peak_vram_mib":4930,"capacity_tokens":65536,"correctness":true}}
+  ]
+}
