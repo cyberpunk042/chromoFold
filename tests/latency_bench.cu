@@ -72,13 +72,17 @@ static void launch_dense(void* p) {
     DenseCtx* c = (DenseCtx*) p;
     const int work = c->Q_ * c->qh, warps_per_block = 4, threads = warps_per_block * 32;
     const int blocks = (work + warps_per_block - 1) / warps_per_block;
-    // bench fixes head_dim=64 -> DPL=2 (warp-cooperative, matched to the compressed kernel)
-    dense_attention_warp<2><<<blocks, threads>>>(c->K, c->V, c->Q, c->out, c->N, c->Q_, c->qh, c->kvh, c->gqa, c->scale, c->qtb);
+    switch (c->hd / 32) {  // DPL = head_dim/32; matched to the compressed kernel dispatch
+        case 2: dense_attention_warp<2><<<blocks, threads>>>(c->K, c->V, c->Q, c->out, c->N, c->Q_, c->qh, c->kvh, c->gqa, c->scale, c->qtb); break;
+        case 4: dense_attention_warp<4><<<blocks, threads>>>(c->K, c->V, c->Q, c->out, c->N, c->Q_, c->qh, c->kvh, c->gqa, c->scale, c->qtb); break;
+        case 8: dense_attention_warp<8><<<blocks, threads>>>(c->K, c->V, c->Q, c->out, c->N, c->Q_, c->qh, c->kvh, c->gqa, c->scale, c->qtb); break;
+        default: break;
+    }
 }
 static void launch_paged(void* p) { cf_kv_paged_attention_async((cf_kv_paged_attention_desc*) p, nullptr); }
 
-static void bench(std::uint32_t N, std::uint32_t Qn) {
-    const std::uint32_t hd = 64, kvh = 2, qh = 14, gqa = 7, page = 128, iters = 50;
+static void bench(std::uint32_t hd, std::uint32_t N, std::uint32_t Qn) {
+    const std::uint32_t kvh = 2, qh = 14, gqa = 7, page = 128, iters = 50;
     const float scale = 1.f / std::sqrt((float) hd);
     std::vector<float> K((std::size_t) N * hd), V((std::size_t) N * hd), Q((std::size_t) Qn * qh * hd);
     for (std::size_t i = 0; i < K.size(); ++i) { K[i] = std::sin(0.01f * i); V[i] = std::cos(0.013f * i); }
@@ -123,16 +127,18 @@ static void bench(std::uint32_t N, std::uint32_t Qn) {
 
     const double comp = time_ms(launch_paged, &desc, iters) * 1000.0 / iters;
     const double dens = time_ms(launch_dense, &dc, iters) * 1000.0 / iters;
-    std::printf("N=%-6u Qn=%-4u | compressed %8.2f us | dense-f16 %8.2f us | ratio %.2fx %s\n",
-                N, Qn, comp, dens, dens / comp, comp <= dens ? "(compressed faster)" : "(dense faster)");
+    std::printf("hd=%-3u N=%-6u Qn=%-4u | compressed %9.2f us | dense-f16 %9.2f us | ratio %.2fx %s\n",
+                hd, N, Qn, comp, dens, dens / comp, comp <= dens ? "(COMPRESSED faster)" : "(dense faster)");
     std::fflush(stdout);
     cudaFree(dQ); cudaFree(dOutC); cudaFree(dOutD); cudaFree(dK); cudaFree(dV);
 }
 
 int main() {
-    std::printf("Compressed int4 paged attention vs dense f16 (Qwen2.5-0.5B dims, RTX 2080 Ti)\n");
-    std::printf("decode (Qn=1) and prefill/batch (Qn=256), short and long context:\n");
-    bench(512, 1); bench(4096, 1);
-    bench(512, 256); bench(4096, 256);
+    std::printf("Compressed int4 warp-cooperative attention vs FAIR dense-f16 warp kernel (RTX 2080 Ti)\n");
+    std::printf("Sweeping head_dim and context to find the P1 bandwidth crossover (int4 reads 4x less):\n");
+    for (std::uint32_t hd : {64u, 128u}) {  // head_dim <= CF_KV_MAX_HEAD_DIM (128)
+        for (std::uint32_t N : {4096u, 16384u, 32768u, 65536u}) bench(hd, N, /*Qn*/ 64u);
+        std::printf("\n");
+    }
     return 0;
 }
