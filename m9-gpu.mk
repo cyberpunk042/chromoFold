@@ -4,7 +4,7 @@ CXX ?= g++
 BUILD ?= build
 COMMON_NVCC = -O2 -std=c++17 -arch=$(ARCH) -Iinclude -lineinfo -Xcompiler=-Wall,-Wextra,-Werror
 
-.PHONY: gpu-fixture-test gpu-correctness gpu-cache-roundtrip gpu-adapter-attention gpu-quantizer-frontier gpu-sanitize gpu-benchmark gpu-validation-clean
+.PHONY: gpu-fixture-test gpu-correctness gpu-cache-roundtrip gpu-adapter-attention gpu-quantizer-frontier gpu-capacity gpu-sanitize gpu-benchmark gpu-validation-clean
 
 gpu-fixture-test:
 	@mkdir -p $(BUILD)
@@ -51,6 +51,17 @@ $(BUILD)/quantizer_frontier:
 # Confirms the live M9 int4 diff (~0.034) IS the quantizer's cost and shrinks ~18x at int8 (reducibility, measured).
 gpu-quantizer-frontier: $(BUILD)/quantizer_frontier
 	$(BUILD)/quantizer_frontier
+
+$(BUILD)/capacity_proof:
+	@mkdir -p $(BUILD)
+	$(NVCC) $(COMMON_NVCC) tests/capacity_proof.cu \
+		src/runtime/compressed_kv_cache.cu src/runtime/kv_gpu_fixture.cpp \
+		src/cuda/kv_cuda_owner.cu src/cuda/paged_kv_attention.cu -o $@
+
+# P10 capacity: real device VRAM (cudaMemGetInfo) of a populated CompressedKvCache vs dense f16 -> how much
+# more context fits at equal memory. int4 ~2.67x (real) on Qwen2.5-0.5B dims; honest about alloc overhead.
+gpu-capacity: $(BUILD)/capacity_proof
+	$(BUILD)/capacity_proof
 
 gpu-sanitize: $(BUILD)/paged_kv_cuda_correctness
 	compute-sanitizer --tool memcheck --error-exitcode 1 $(BUILD)/paged_kv_cuda_correctness
