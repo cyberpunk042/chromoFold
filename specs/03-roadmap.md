@@ -390,13 +390,24 @@ ms → 2.0 ms).
 **The honest latency verdict (P7), against a FAIR baseline.** The first warp run read "4.6× faster than dense" — but
 that dense baseline was the *naive* per-thread kernel. Rebuilt it to be **equally warp-cooperative** (only f16-read
 vs int4-decode differs). Fair result: compressed is **~1.3× slower** (N=4096: 2.53 ms vs dense 1.91 ms) — the
-residual int4 decode compute (shift/mask/scale-mul) dense doesn't pay. So P10's "equal-or-better latency" is **still
-not met — but the gap to a fair dense kernel is now ~1.3×, down from ~24×.** The P1 bandwidth crossover (int4 reads
-4× less) sits just past this workload; it should appear at larger `head_dim`/context or on a bandwidth-starved GPU.
-`ncu` would confirm, but counters are permission-blocked here (`ERR_NVGPUCTRPERM`). Net: capacity + accuracy wins
-are real and measured; latency is now competitive (1.3×) and the honest ceiling is characterized, not spun.
+residual int4 decode compute (shift/mask/scale-mul) dense doesn't pay. At short context the gap to a fair dense kernel is
+~1.3× (down from ~24×), and a **head_dim × context sweep locates the P1 crossover** (`gpu-latency`):
 
-**Remaining for the P10 ship criterion:** (1) the **latency** gap above — now ~1.3× vs a fair dense baseline after the warp-cooperative rewrite; further
+| head_dim | N=4096 | N=16384 | N=32768 | N=65536 |
+|---|---|---|---|---|
+| **64** | 0.78× | **1.02×** | 1.03× | **1.04×** (compressed faster) |
+| 128 | 0.76× | 0.83× | 0.86× | 0.82× (dense faster) |
+
+So P10's "equal-or-better latency" **is met in a regime** — at `head_dim` 64, compressed overtakes dense around
+N≈16384 and holds ~1.04× faster: the compute-for-memory thesis (P1) confirmed end-to-end. **But it's marginal, not
+the 4× the bandwidth ratio implies**: even at 64k the kernel isn't purely K/V-bandwidth-bound (decode + softmax +
+per-dim scale reads dilute it), so 4×-less-K/V nets only ~4%, and it plateaus. At `head_dim` 128 the per-lane decode
+doubles and **cancels the crossover** (~0.85× to 64k). Honest net: the warp rewrite made latency **competitive**
+(24× slower → ~break-even, slightly better only in the small-head/long-context corner); compression's **decisive**
+value is capacity (2.67×), not speed. (`ncu` would pinpoint the residual, but counters are permission-blocked here —
+`ERR_NVGPUCTRPERM`.)
+
+**Remaining for the P10 ship criterion:** (1) the **latency** gap above — competitive after the warp rewrite (P1 crossover located: compressed wins ~1.04× at head_dim 64, N>=16k); further
 M11 kernel work (or a memory-bound workload where the bandwidth savings dominate) to reach parity; (2) the
 **end-to-end** win — this capacity number is engine-level, but llama still
 allocates its own dense KV in the live path, so the through-runtime win needs replacing llama's KV allocation (not
