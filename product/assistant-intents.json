@@ -1,0 +1,37 @@
+{
+  "schema": "chromofold.assistant-intents.v1",
+  "intents": {
+    "fit-model": {
+      "description": "Fit a model that does not currently fit in VRAM.",
+      "default_goal": "longer-context",
+      "questions": ["model", "context", "concurrency"],
+      "warnings": ["A recommendation is an estimate until hardware qualification returns PASS."]
+    },
+    "longer-context": {
+      "description": "Increase usable context on the same GPU.",
+      "default_goal": "longer-context",
+      "questions": ["model", "context", "concurrency"]
+    },
+    "more-users": {
+      "description": "Increase concurrent requests under the same VRAM limit.",
+      "default_goal": "high-concurrency",
+      "questions": ["model", "context", "concurrency"]
+    },
+    "shared-prompts": {
+      "description": "Reduce memory for workloads with repeated prefixes or system prompts.",
+      "default_goal": "shared-prefix",
+      "questions": ["model", "context", "concurrency"]
+    },
+    "explain": {
+      "description": "Explain ChromoFold concepts and evidence levels without making a performance claim.",
+      "default_goal": "balanced",
+      "questions": []
+    }
+  },
+  "evidence_boundary": {
+    "estimate": "Generated from machine and workload metadata; not a measured result.",
+    "measured": "Produced by a benchmark on a named machine and configuration.",
+    "qualified": "Accepted only after the RC1 hardware harness returns PASS for the exact artifact digest.",
+    "independent": "Reproduced by a third party from downloadable evidence."
+  }
+}
