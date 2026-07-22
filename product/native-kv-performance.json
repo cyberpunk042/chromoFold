@@ -1,9 +1,8 @@
 {
-  "schema": "chromofold.native-kv-performance.v1",
+  "schema": "chromofold.native-kv-performance.v2",
   "title": "Native compressed paged-attention performance",
   "hardware": "NVIDIA RTX 2080 Ti (sm_75)",
-  "model_shape": "Qwen2.5-0.5B attention dimensions",
-  "context_tokens": 4096,
+  "model_shape": "Qwen2.5-0.5B-derived attention dimensions and controlled head-dimension sweep",
   "history": [
     {"stage": "original bit-by-bit decoder", "compressed_latency_us": 243000, "fair_dense_latency_us": 10125, "gap_vs_dense": 24.0},
     {"stage": "fixed-width word-cached decoder", "compressed_latency_us": 68992, "fair_dense_latency_us": 9856, "gap_vs_dense": 7.0},
@@ -11,10 +10,20 @@
     {"stage": "warp-cooperative compressed kernel", "compressed_latency_us": 2528, "fair_dense_latency_us": 1912, "gap_vs_dense": 1.32}
   ],
   "fair_comparisons": [
-    {"workload": "N=512 decode", "compressed_us": 388, "dense_f16_us": 310, "compressed_over_dense": 1.25},
-    {"workload": "N=4096 decode", "compressed_us": 2528, "dense_f16_us": 1912, "compressed_over_dense": 1.32},
-    {"workload": "N=4096 batch Qn=256", "compressed_us": 6185, "dense_f16_us": 4537, "compressed_over_dense": 1.36}
+    {"workload": "head_dim=64, N=4096, Qn=64", "compressed_over_dense": 1.28, "verdict": "dense faster"},
+    {"workload": "head_dim=64, N=16384, Qn=64", "compressed_over_dense": 0.98, "verdict": "compressed ~1.02× faster"},
+    {"workload": "head_dim=64, N=32768, Qn=64", "compressed_over_dense": 0.97, "verdict": "compressed ~1.03× faster"},
+    {"workload": "head_dim=64, N=65536, Qn=64", "compressed_over_dense": 0.96, "verdict": "compressed ~1.04× faster"},
+    {"workload": "head_dim=128, N=4096–65536, Qn=64", "compressed_over_dense": 1.16, "verdict": "dense remains ~1.16–1.32× faster"}
   ],
+  "crossover": {
+    "status": "located",
+    "winning_regime": "head_dim=64 and context >= 16384 on the tested RTX 2080 Ti workload",
+    "measured_speedup_range": "~1.02–1.04×",
+    "non_winning_regime": "head_dim=128 through 65536 context tokens",
+    "interpretation": "The bandwidth crossover is real but marginal and regime-specific. Decode arithmetic, softmax and scale reads dilute the four-times-smaller K/V read advantage.",
+    "primary_product_value": "capacity"
+  },
   "correctness": {
     "gpu_reference_max_error": 0.000000536,
     "roundtrip_max_error": 0.000000149,
@@ -24,20 +33,23 @@
   },
   "headline": {
     "speedup_over_original": 122,
-    "current_gap_vs_fair_dense": "~1.3× slower",
-    "latency_win": false,
-    "ship_criterion_met": false
+    "short_context_gap": "~1.3× slower",
+    "best_measured_latency_win": "~1.04× faster",
+    "latency_win": true,
+    "ship_criterion_met_in_regime": true,
+    "capacity_multiplier": "2.67× more context at equal VRAM"
   },
-  "crossover_hypothesis": "Parity or a latency win requires a bandwidth-bound regime where the four-times-smaller int4 memory reads dominate decode arithmetic. Candidate dimensions are larger head_dim, longer context, higher concurrent KV pressure, or a bandwidth-starved GPU.",
   "limitations": [
+    "The latency win is limited to the measured small-head, long-context regime and plateaus near four percent.",
+    "At head_dim 128, dense remains faster through 65536 context tokens.",
     "These are engine-level kernel measurements, not end-to-end llama.cpp serving results.",
-    "The fair dense baseline is equally warp-cooperative; the compressed kernel is still slower on the measured workload.",
     "Nsight Compute counters were unavailable because ERR_NVGPUCTRPERM blocked profiling.",
     "The live llama.cpp path still allocates its own dense KV cache."
   ],
   "source_commits": [
     "bb74f5b86105e3cd472df6dec3f63540e04a1581",
     "61e37b7ebc61406ef4243819f9731354e582fad3",
-    "4d28bfcb270f84f5dd2467aa9979a5cfe3788686"
+    "2730a3dcf97355dcb740b6bce6aa048cf360495b",
+    "fe05a6bf2350476f11473866dc5a7365529146f9"
   ]
 }
