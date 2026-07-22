@@ -161,3 +161,38 @@ Evidence: [`integrations/llama.cpp/runtime/append_live_kv_stats.json`](append_li
   prompt-prefill batch was not captured (a first-batch pairing detail to chase). Noted, not hidden.
 
 So `--require-claim` still **honestly fails** (compressed attention not yet exercised; that's the replace step).
+
+## Layer 2 — replace: **every primitive proven in isolation** (2026-07-22)
+
+The replace step serves attention from the compressed pages and overwrites the model's attention output. Rather
+than wire the fragile in-graph overwrite blind, each piece it stands on was implemented and **verified against a
+dense reference first** (all clean under `-Werror`):
+
+| primitive | what it proves | result | how to run |
+|---|---|---|---|
+| `attention_view` active tail | the unsealed tail (< page_size most-recent tokens) is exposed as a dense fp32 device buffer, so attention covers *all* history | — | (engine) |
+| cache round-trip | `append → attention_view (sealed+active) → cf_kv_paged_attention_async` equals dense over the stored values | **1.04e-07** (70 tok = 2 int4 pages + 6 active) | `make -f m9-gpu.mk gpu-cache-roundtrip` |
+| `cf_llama_kv_attention` (GQA) | the exact adapter call the callback will make, at the live model's shape | **2.38e-07** (2 kv / 14 query / group 7) | `make -f m9-gpu.mk gpu-adapter-attention` |
+
+So the compressed-serving math and the whole `append → attend` path are numerically equal to dense within float
+rounding, through the **public adapter ABI**. What remains is purely **in-graph plumbing** in the callback:
+1. On `Qcur-L` (ROPE, `[head_dim, query_heads, T]`) **device-copy** `t->data` into a per-layer buffer (avoid
+   ggml buffer reuse before `kqv_out`), record `query_heads`, `T`.
+2. On `kqv_out-L` call `cf_llama_kv_attention(adapter, L, Qcur_dev, (float*)kqv_out->data, T, query_heads,
+   query_heads/kv_heads, query_token_begin = tok_begin[L]-T, 1/√head_dim, 0, stream)` — overwriting `kqv_out`
+   in place — and bump `compressed_attention_launches`.
+
+**Risks to resolve during that wiring (each needs a live check, not assumption):**
+- **`kqv_out` semantics.** `[896,T]` is ambiguous on this model — `n_head·head_dim == n_embd == 896` — so the node
+  could be the pre-`wo` head concatenation (the correct replace target) **or** the post-`wo` output. Must confirm
+  against the pinned graph builder before overwriting.
+- **The prompt-prefill append gap** (noted in the append section): attention over pages misses the prompt until
+  prefill K/V are appended. Must be fixed and re-checked via the round-trip before parity can hold.
+- **ggml-cuda stream/sync.** `cb_eval(ask=false)` fires on the compute stream; the replace kernel must be ordered
+  after Qcur/K/V are ready and before `kqv_out` is consumed (a `cudaDeviceSynchronize` around it is correct if
+  slow).
+- **`t->data` as a device pointer** holds for the ggml-cuda backend but should be asserted, not assumed.
+
+With these proven primitives, the replace step is de-risked from "unwritten compressed-attention wiring" to "a
+bounded in-graph plumbing + prefill fix, on a verified core" — and `run_pair_server.py --parallel 1` is the gate
+that flips `--require-claim` once token parity holds.
