@@ -16,6 +16,16 @@
     {"workload": "head_dim=64, N=65536, Qn=64", "compressed_over_dense": 0.96, "verdict": "compressed ~1.04× faster"},
     {"workload": "head_dim=128, N=4096–65536, Qn=64", "compressed_over_dense": 1.16, "verdict": "dense remains ~1.16–1.32× faster"}
   ],
+  "crossover_sweep": {
+    "status": "measured",
+    "query_count": 64,
+    "context_tokens": [4096, 16384, 32768, 65536],
+    "ratio_definition": "dense_latency / compressed_latency; values above 1.0 mean compressed is faster",
+    "rows": [
+      {"head_dim": 64, "dense_over_compressed": [0.78, 1.02, 1.03, 1.04]},
+      {"head_dim": 128, "dense_over_compressed": [0.76, 0.83, 0.86, 0.82]}
+    ]
+  },
   "crossover": {
     "status": "located",
     "winning_regime": "head_dim=64 and context >= 16384 on the tested RTX 2080 Ti workload",
