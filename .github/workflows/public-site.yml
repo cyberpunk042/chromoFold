@@ -19,7 +19,9 @@ on:
       - "product/downloads.json"
       - "product/evidence-registry.json"
       - "tools/build_public_site.py"
+      - "tests/test_public_site.py"
       - "site.mk"
+      - ".github/workflows/public-site.yml"
   workflow_dispatch:
 
 permissions:
@@ -48,13 +50,13 @@ jobs:
           path: dist/site
           if-no-files-found: error
       - name: Upload Pages artifact
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist/site
 
   deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request'
     needs: build
     environment:
       name: github-pages
