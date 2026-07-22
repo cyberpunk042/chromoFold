@@ -102,23 +102,41 @@ __global__ void paged_attention_kernel(cf_kv_paged_attention_desc desc) {
             }
             score *= desc.softmax_scale;
 
-            float value[CF_KV_MAX_HEAD_DIM];
             const float v_scale = page.v_scales[local];
             if (page.fixed_code_length) {
+                // Fused: decode V and apply the online-softmax rescale in one pass — no value[] temp (drops a
+                // CF_KV_MAX_HEAD_DIM local array). Same semantics as online_add(), inlined.
                 const uint32_t bits = page.fixed_code_length;
                 const uint32_t mask = (1u << bits) - 1u;
                 const long bit0 = static_cast<long>(local) * page.head_dim * bits;
                 uint32_t widx = static_cast<uint32_t>(bit0 >> 5);
                 uint32_t word = page.v_words[widx];
-                for (uint32_t d = 0; d < desc.head_dim; ++d) {
-                    const long bit = bit0 + static_cast<long>(d) * bits;
-                    const uint32_t wi = static_cast<uint32_t>(bit >> 5);
-                    if (wi != widx) { widx = wi; word = page.v_words[wi]; }
-                    const uint32_t shift = (32u - bits) - static_cast<uint32_t>(bit & 31);
-                    const int quantized = static_cast<int>((word >> shift) & mask);
-                    value[d] = static_cast<float>(quantized - static_cast<int>(page.zero_point)) * v_scale;
+                const int zp = static_cast<int>(page.zero_point);
+                if (!initialized) {
+                    maximum = score; sum = 1.0f; initialized = 1;
+                    for (uint32_t d = 0; d < desc.head_dim; ++d) {
+                        const long bit = bit0 + static_cast<long>(d) * bits;
+                        const uint32_t wi = static_cast<uint32_t>(bit >> 5);
+                        if (wi != widx) { widx = wi; word = page.v_words[wi]; }
+                        const uint32_t shift = (32u - bits) - static_cast<uint32_t>(bit & 31);
+                        weighted[d] = static_cast<float>(static_cast<int>((word >> shift) & mask) - zp) * v_scale;
+                    }
+                } else {
+                    const float nm = fmaxf(maximum, score);
+                    const float a = __expf(maximum - nm), b = __expf(score - nm);
+                    sum = sum * a + b;
+                    for (uint32_t d = 0; d < desc.head_dim; ++d) {
+                        const long bit = bit0 + static_cast<long>(d) * bits;
+                        const uint32_t wi = static_cast<uint32_t>(bit >> 5);
+                        if (wi != widx) { widx = wi; word = page.v_words[wi]; }
+                        const uint32_t shift = (32u - bits) - static_cast<uint32_t>(bit & 31);
+                        const float vdeq = static_cast<float>(static_cast<int>((word >> shift) & mask) - zp) * v_scale;
+                        weighted[d] = weighted[d] * a + vdeq * b;
+                    }
+                    maximum = nm;
                 }
             } else {
+                float value[CF_KV_MAX_HEAD_DIM];
                 int v_bit = row_bit_position(page.v_words, page.v_block_offsets, page.v_lut,
                                              static_cast<int>(page.v_max_code_length),
                                              static_cast<int>(page.block_size),
@@ -130,8 +148,8 @@ __global__ void paged_attention_kernel(cf_kv_paged_attention_desc desc) {
                     v_bit += symbol_length >> 8;
                     value[d] = static_cast<float>(quantized - static_cast<int>(page.zero_point)) * v_scale;
                 }
+                online_add(score, value, static_cast<int>(desc.head_dim), &maximum, &sum, weighted, &initialized);
             }
-            online_add(score, value, static_cast<int>(desc.head_dim), &maximum, &sum, weighted, &initialized);
         }
     }
 
