@@ -70,7 +70,7 @@ def build(output: Path) -> dict[str, Any]:
         "compatibility": load_object(PRODUCT / "compatibility.json"),
         "profiles": load_object(PRODUCT / "profiles.json"),
         "portal": load_object(PRODUCT / "portal.json"),
-        "visualizations": load_object(PRODUCT / "visualizations.json"),
+        "kv_scaling": load_object(PRODUCT / "kv-scaling.json"),
         "repository": "https://github.com/cyberpunk042/chromoFold",
     }
     (output / "data.js").write_text(
