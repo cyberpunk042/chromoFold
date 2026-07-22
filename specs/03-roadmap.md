@@ -359,9 +359,22 @@ shows **int8 shrinks it ~18× to 0.0017** — the quantizer cost is real and red
 *compressed attention exercised + zero dense fallback* (met) **plus a tolerance on the attention diff**, not `==`.
 See [`integrations/llama.cpp/runtime/CLI_EVIDENCE_PATCH.md`](../integrations/llama.cpp/runtime/CLI_EVIDENCE_PATCH.md).
 
-**Remaining for the P10 ship criterion:** the *capacity* proof — larger batch / longer context at equal VRAM with
-quality intact — plus multi-ubatch/sequence-management robustness (current position-alignment covers single-ubatch
-`initial_support`), and an int8 (or finer) quantizer variant to bring the accuracy cost under a chosen tolerance.
+**Accuracy frontier — mapped and quantizer-bound.** Added an **int8 codec** (`CHROMOFOLD_KV_BITS=8`, encode-only
+since the decoder is bit-width-agnostic; bit-exact at 2.98e-07): live it cuts the attention diff **14×** (0.034 →
+0.0024). A host study (`make -f m9-gpu.mk gpu-quantizer-frontier`, calibrated to reproduce the live int4 error)
+shows the two levers short of a new quantizer are **both dominated**: finer scale grouping is Pareto-dominated by
+int8, and entropy-coding the symbols reclaims only ~10% (int4)/6% (int8) — the max-scaled symbols are near-uniform.
+So the useful frontier is two points: **coarse int4** (3.4× vs f16, 0.038 err) and **int8** (1.8× vs f16, 0.002
+err); moving it needs a non-uniform/vector quantizer, not scales or entropy coding (P7 — measured before building).
+
+**Capacity — the "more fits at equal VRAM" number, measured** (`make -f m9-gpu.mk gpu-capacity`). Real device VRAM
+(`cudaMemGetInfo`) of a populated `CompressedKvCache` vs dense f16 (4096 tokens, Qwen2.5-0.5B dims): **int4 fits
+2.67× more context at equal VRAM** (18 MB vs 48 MB; 3.21× logical, 1.20× alloc overhead), int8 1.60×.
+
+**Remaining for the P10 ship criterion:** the **end-to-end** win — this capacity number is engine-level; llama still
+allocates its own dense KV in the live path, so the through-runtime win needs replacing llama's KV allocation (not
+exposed on this system) — plus a **latency** measurement and **multi-ubatch/sequence-management** robustness
+(current position-alignment covers single-ubatch `initial_support`).
 
 ## M10 — Rust wrapper (only now)
 **Goal.** Add the Rust safe-systems layer (parsing, integrity, mmap, corpus, CLI, server glue) over the C ABI —
