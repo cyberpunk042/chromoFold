@@ -1,0 +1,33 @@
+{
+  "schema": "chromofold.kv-scaling.v1",
+  "title": "KV cache scaling with context length",
+  "scope": "Warp prototype length sweep using real Qwen2.5-0.5B KV replicated to isolate data-structure scaling; absolute timings are RTX 2080 Ti specific.",
+  "hardware": "NVIDIA RTX 2080 Ti (sm_75)",
+  "window_tokens": 256,
+  "context_tokens": [1024, 2048, 4096, 8192, 16384, 32768, 65536],
+  "latency_ms": {
+    "decode_all": [1.62, 2.48, 3.81, 8.84, 13.47, 33.64, 138.16],
+    "window_read": [1.28, 1.36, 1.24, 1.54, 1.35, 1.27, 1.28]
+  },
+  "kv_memory_mib": {
+    "fp16": [0.5, 1.0, 2.1, 4.2, 8.4, 16.8, 33.6],
+    "chromofold": [0.07, 0.13, 0.26, 0.52, 1.04, 2.07, 4.14]
+  },
+  "headline": {
+    "window_latency_ms": 1.3,
+    "speedup_at_64k": 107.9,
+    "kv_memory_reduction": "7.7–8.3×"
+  },
+  "quality": [
+    {"scheme": "int4 per-tensor", "bits_per_value": 2.77, "compression_vs_fp16": 5.8, "attention_mse": 0.000713},
+    {"scheme": "KIVI int4", "bits_per_value": 4.15, "compression_vs_fp16": 3.9, "attention_mse": 0.00015, "recommended": true},
+    {"scheme": "int2 per-tensor", "bits_per_value": 1.52, "compression_vs_fp16": 10.5, "attention_mse": 0.0917},
+    {"scheme": "KIVI int2", "bits_per_value": 1.9, "compression_vs_fp16": 8.4, "attention_mse": 0.0203}
+  ],
+  "native_status": [
+    {"stage": "Fused KV attention", "result": "7.7–8.3× less KV memory", "correctness": "bit-identical to dense"},
+    {"stage": "Compressed paged attention", "result": "matches dense within 5.96e-07", "correctness": "GPU dense reference"},
+    {"stage": "Qwen2.5-0.5B through llama.cpp", "result": "generates real tokens", "correctness": "valid end-to-end proof; full compressed-cache serving integration remains in progress"}
+  ],
+  "boundary": "The scaling curve demonstrates the prototype data-structure shape. It does not establish production latency for larger models or different GPUs. Native CUDA results and end-to-end integration status are reported separately."
+}
