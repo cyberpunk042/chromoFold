@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cyberpunk042.github.io/chromoFold/schemas/evidence-result.v1.json",
+  "title": "ChromoFold benchmark result",
+  "type": "object",
+  "required": ["schema", "role", "fingerprint", "metrics"],
+  "properties": {
+    "schema": {"const": "chromofold.evidence-result.v1"},
+    "role": {"enum": ["baseline", "candidate"]},
+    "fingerprint": {
+      "type": "object",
+      "required": ["model", "runtime", "hardware", "workload"],
+      "properties": {
+        "model": {"type": "string", "minLength": 1},
+        "runtime": {"type": "string", "minLength": 1},
+        "hardware": {"type": "string", "minLength": 1},
+        "workload": {"type": "string", "minLength": 1},
+        "release_digest": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["throughput_tokens_s", "latency_p50_ms", "latency_p95_ms", "peak_vram_mib", "correctness"],
+      "properties": {
+        "throughput_tokens_s": {"type": "number", "exclusiveMinimum": 0},
+        "latency_p50_ms": {"type": "number", "minimum": 0},
+        "latency_p95_ms": {"type": "number", "minimum": 0},
+        "peak_vram_mib": {"type": "number", "exclusiveMinimum": 0},
+        "capacity_tokens": {"type": "number", "minimum": 0},
+        "correctness": {"type": "boolean"}
+      },
+      "additionalProperties": {"type": ["number", "string", "boolean", "null"]}
+    },
+    "samples": {"type": "array", "items": {"type": "object"}},
+    "notes": {"type": "string"}
+  },
+  "additionalProperties": true
+}
