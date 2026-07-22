@@ -36,6 +36,7 @@
     "short_context_gap": "~1.3× slower",
     "best_measured_latency_win": "~1.04× faster",
     "latency_win": true,
+    "universal_latency_win": false,
     "ship_criterion_met_in_regime": true,
     "capacity_multiplier": "2.67× more context at equal VRAM"
   },
