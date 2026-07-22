@@ -1,0 +1,33 @@
+name: Runtime integration proposal
+description: Propose a new ChromoFold runtime, model format or platform integration.
+title: "[integration] "
+labels: ["integration", "proposal"]
+body:
+  - type: input
+    id: runtime
+    attributes: {label: Runtime and version, placeholder: "vLLM 0.x, TensorRT-LLM..."}
+    validations: {required: true}
+  - type: textarea
+    id: target
+    attributes: {label: Target matrix, description: "Model format, GPU vendor/architecture, operating system and deployment mode."}
+    validations: {required: true}
+  - type: textarea
+    id: path
+    attributes: {label: Compressed data path, description: "What remains compressed and which consumer operates on it directly?"}
+    validations: {required: true}
+  - type: textarea
+    id: adapter
+    attributes: {label: Adapter and lifecycle contract, description: "Snapshot source, ownership, cancellation, errors, upgrades and rollback."}
+    validations: {required: true}
+  - type: textarea
+    id: correctness
+    attributes: {label: Independent correctness reference and test plan}
+    validations: {required: true}
+  - type: textarea
+    id: scenarios
+    attributes: {label: Required scenario hooks, description: "Cold/warm cache, overload, cancellation, worker failure, network fault, certificate rotation, rolling upgrade and rollback."}
+    validations: {required: true}
+  - type: textarea
+    id: limitations
+    attributes: {label: Known limitations and explicit non-goals}
+    validations: {required: true}
