@@ -1,0 +1,60 @@
+{
+  "schema": "chromofold.public-claims.v1",
+  "claims": [
+    {
+      "id": "access",
+      "name": "Compressed random access",
+      "result": "~5 ns per access",
+      "meaning": "Jump to an arbitrary token while the sequence remains compressed.",
+      "hardware": "NVIDIA RTX 2080 Ti",
+      "scope": "native CUDA benchmark; bit-identical reference",
+      "evidence_level": "measured"
+    },
+    {
+      "id": "fm-search",
+      "name": "Search on compressed VRAM data",
+      "result": "~19M searches/s",
+      "meaning": "Count and locate patterns without expanding the searchable index.",
+      "hardware": "NVIDIA RTX 2080 Ti",
+      "scope": "native CUDA benchmark; bit-identical reference",
+      "evidence_level": "measured"
+    },
+    {
+      "id": "fused-matmul",
+      "name": "Fused compressed matrix compute",
+      "result": "10.6× less working VRAM",
+      "meaning": "Consume compressed weights inside the matrix operation without a full decompressed buffer.",
+      "hardware": "NVIDIA RTX 2080 Ti",
+      "scope": "kernel benchmark; large-size region",
+      "evidence_level": "measured"
+    },
+    {
+      "id": "kv-attention",
+      "name": "Compressed KV attention",
+      "result": "7.7–8.3× less KV memory",
+      "meaning": "Hold substantially more context state in the same VRAM budget.",
+      "hardware": "NVIDIA RTX 2080 Ti",
+      "scope": "kernel benchmark; end-to-end qualification pending",
+      "evidence_level": "measured"
+    },
+    {
+      "id": "sparse-gather",
+      "name": "Sparse direct access",
+      "result": "up to ~18× faster",
+      "meaning": "Read the few required positions instead of decompressing millions of unused values.",
+      "hardware": "NVIDIA RTX 2080 Ti",
+      "scope": "sparse benchmark region",
+      "evidence_level": "measured"
+    },
+    {
+      "id": "delta-clusters",
+      "name": "Cross-request prompt sharing",
+      "result": "25× less memory",
+      "meaning": "Share common prompt state across 256 near-identical requests.",
+      "hardware": "reference benchmark environment",
+      "scope": "delta-cluster benchmark",
+      "evidence_level": "measured"
+    }
+  ],
+  "boundary": "These are repository benchmark claims, not a universal prediction. Production claims require exact-workload PASS evidence and independent reproduction."
+}
