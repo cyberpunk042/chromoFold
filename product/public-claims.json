@@ -1,69 +1,14 @@
 {
   "schema": "chromofold.public-claims.v1",
   "claims": [
-    {
-      "id": "access",
-      "name": "Compressed random access",
-      "result": "~5 ns per access",
-      "meaning": "Jump to an arbitrary token while the sequence remains compressed.",
-      "hardware": "NVIDIA RTX 2080 Ti",
-      "scope": "native CUDA benchmark; bit-identical reference",
-      "evidence_level": "measured"
-    },
-    {
-      "id": "fm-search",
-      "name": "Search on compressed VRAM data",
-      "result": "~19M searches/s",
-      "meaning": "Count and locate patterns without expanding the searchable index.",
-      "hardware": "NVIDIA RTX 2080 Ti",
-      "scope": "native CUDA benchmark; bit-identical reference",
-      "evidence_level": "measured"
-    },
-    {
-      "id": "fused-matmul",
-      "name": "Fused compressed matrix compute",
-      "result": "10.6× less working VRAM",
-      "meaning": "Consume compressed weights inside the matrix operation without a full decompressed buffer.",
-      "hardware": "NVIDIA RTX 2080 Ti",
-      "scope": "kernel benchmark; large-size region",
-      "evidence_level": "measured"
-    },
-    {
-      "id": "kv-attention",
-      "name": "Compressed KV attention",
-      "result": "7.7–8.3× less KV memory",
-      "meaning": "Hold substantially more context state in the same VRAM budget.",
-      "hardware": "NVIDIA RTX 2080 Ti",
-      "scope": "kernel benchmark; end-to-end qualification pending",
-      "evidence_level": "measured"
-    },
-    {
-      "id": "kv-native-latency",
-      "name": "Native compressed KV latency",
-      "result": "~1.3× slower than fair dense",
-      "meaning": "The warp-cooperative kernel is 122× faster than the original decoder, but does not yet beat an equally optimized dense-f16 kernel on the measured workload.",
-      "hardware": "NVIDIA RTX 2080 Ti",
-      "scope": "Qwen2.5-0.5B dimensions; N=4096; engine-level fair warp-cooperative comparison",
-      "evidence_level": "measured"
-    },
-    {
-      "id": "sparse-gather",
-      "name": "Sparse direct access",
-      "result": "up to ~18× faster",
-      "meaning": "Read the few required positions instead of decompressing millions of unused values.",
-      "hardware": "NVIDIA RTX 2080 Ti",
-      "scope": "sparse benchmark region",
-      "evidence_level": "measured"
-    },
-    {
-      "id": "delta-clusters",
-      "name": "Cross-request prompt sharing",
-      "result": "25× less memory",
-      "meaning": "Share common prompt state across 256 near-identical requests.",
-      "hardware": "reference benchmark environment",
-      "scope": "delta-cluster benchmark",
-      "evidence_level": "measured"
-    }
+    {"id":"access","name":"Compressed random access","result":"~5 ns per access","meaning":"Jump to an arbitrary token while the sequence remains compressed.","hardware":"NVIDIA RTX 2080 Ti","scope":"native CUDA benchmark; bit-identical reference","evidence_level":"measured"},
+    {"id":"fm-search","name":"Search on compressed VRAM data","result":"~19M searches/s","meaning":"Count and locate patterns without expanding the searchable index.","hardware":"NVIDIA RTX 2080 Ti","scope":"native CUDA benchmark; bit-identical reference","evidence_level":"measured"},
+    {"id":"fused-matmul","name":"Fused compressed matrix compute","result":"10.6× less working VRAM","meaning":"Consume compressed weights inside the matrix operation without a full decompressed buffer.","hardware":"NVIDIA RTX 2080 Ti","scope":"kernel benchmark; large-size region","evidence_level":"measured"},
+    {"id":"kv-attention","name":"Compressed KV attention","result":"7.7–8.3× less KV memory","meaning":"Hold substantially more context state in the same VRAM budget.","hardware":"NVIDIA RTX 2080 Ti","scope":"kernel benchmark; end-to-end qualification pending","evidence_level":"measured"},
+    {"id":"kv-native-latency","name":"Native compressed KV latency","result":"~1.04× faster in a narrow regime","meaning":"At head_dim 64 and context of at least 16K, the fair warp-cooperative sweep found a small compressed-kernel latency win. At short context or head_dim 128, dense remains faster.","hardware":"NVIDIA RTX 2080 Ti","scope":"engine-level sweep; Qn=64; head_dim=64/128; context 4K–64K; fair warp-cooperative dense baseline","evidence_level":"measured"},
+    {"id":"kv-capacity","name":"KV capacity at equal VRAM","result":"2.67× more context","meaning":"Capacity remains the decisive measured value even where the latency crossover is absent or marginal.","hardware":"NVIDIA RTX 2080 Ti","scope":"engine-level compressed KV allocation; live llama.cpp dense-cache replacement still pending","evidence_level":"measured"},
+    {"id":"sparse-gather","name":"Sparse direct access","result":"up to ~18× faster","meaning":"Read the few required positions instead of decompressing millions of unused values.","hardware":"NVIDIA RTX 2080 Ti","scope":"sparse benchmark region","evidence_level":"measured"},
+    {"id":"delta-clusters","name":"Cross-request prompt sharing","result":"25× less memory","meaning":"Share common prompt state across 256 near-identical requests.","hardware":"reference benchmark environment","scope":"delta-cluster benchmark","evidence_level":"measured"}
   ],
-  "boundary": "These are repository benchmark claims, not a universal prediction. Production claims require exact-workload PASS evidence and independent reproduction. Optimization speedup over an older ChromoFold kernel is never presented as a win over a fair dense baseline."
+  "boundary": "These are repository benchmark claims, not a universal prediction. The measured latency win is marginal and limited to head_dim 64 at long context on one GPU; dense remains faster in other measured regions. Production claims require exact-workload PASS evidence and independent reproduction."
 }
