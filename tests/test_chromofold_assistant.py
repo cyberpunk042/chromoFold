@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -39,9 +40,22 @@ def test_ready_plan_requires_qualification() -> None:
     result = assistant.build_plan({
         "intent": "longer-context", "model": "model.gguf", "context": 65536, "concurrency": 4,
     })
-    assert result["state"] == "READY"
+    assert result["state"] == "READY", result
     assert result["qualification_required"] is True
     assert any("qualification" in step.lower() for step in result["plan"])
+
+
+def test_product_cli_accepts_json_consumer_flag() -> None:
+    proc = subprocess.run(
+        [sys.executable, str(ROOT / "tools/chromofold.py"), "recommend", "--goal", "balanced", "--json"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    result = json.loads(proc.stdout)
+    assert result["qualification_required"] is True
 
 
 def test_installers_are_local_only() -> None:
@@ -78,6 +92,7 @@ if __name__ == "__main__":
     test_missing_inputs_are_requested()
     test_explanation_has_evidence_boundary()
     test_ready_plan_requires_qualification()
+    test_product_cli_accepts_json_consumer_flag()
     test_installers_are_local_only()
     test_bundle_contains_assistant_and_installers()
     test_intent_catalog_is_versioned()
