@@ -41,10 +41,17 @@ struct CompressedKvCache::Impl {
     explicit Impl(const KvCacheConfig& config)
         : heads(static_cast<std::size_t>(config.layer_count) * config.kv_head_count) {}
 
+    ~Impl() {
+        if (active_k_dev != nullptr) cudaFree(active_k_dev);
+        if (active_v_dev != nullptr) cudaFree(active_v_dev);
+    }
+
     std::vector<HeadState> heads;
     cuda_runtime::DeviceKvPageArray descriptor_array;
     std::uint64_t appended_tokens = 0;
     std::uint64_t sealed_tokens = 0;
+    float* active_k_dev = nullptr;   // interleaved [active_token_count, kv_head_count, head_dim] fp32 tail
+    float* active_v_dev = nullptr;
 };
 
 CompressedKvCache::CompressedKvCache(KvCacheConfig config) : impl_(nullptr), config_(config) {
@@ -127,6 +134,44 @@ KvAttentionView CompressedKvCache::attention_view(std::uint32_t layer, void* str
         impl_->descriptor_array = cuda_runtime::DeviceKvPageArray::upload(view.host_descriptors, stream);
         view.device_descriptors = impl_->descriptor_array.device_data();
         view.page_count = impl_->descriptor_array.size();
+    }
+
+    // Expose the unsealed active tail as a dense fp32 device buffer with the kernel's expected layout
+    // [active_token_count, kv_head_count, head_dim] (all kv heads share token_begin/token_count by construction).
+    const std::uint32_t hd = config_.head_dim, kvh = config_.kv_head_count;
+    const HeadState& h0 = impl_->heads[slot_index(config_, layer, 0)];
+    const std::uint32_t active_tokens = static_cast<std::uint32_t>(h0.active.keys.size() / hd);
+    if (active_tokens > 0) {
+        std::vector<float> kbuf(static_cast<std::size_t>(active_tokens) * kvh * hd);
+        std::vector<float> vbuf(kbuf.size());
+        for (std::uint32_t head = 0; head < kvh; ++head) {
+            const HeadState& st = impl_->heads[slot_index(config_, layer, head)];
+            const std::uint32_t st_tokens = static_cast<std::uint32_t>(st.active.keys.size() / hd);
+            if (st_tokens != active_tokens || st.active.token_begin != h0.active.token_begin) {
+                throw std::runtime_error("KV active tails are not aligned across heads");
+            }
+            for (std::uint32_t tok = 0; tok < active_tokens; ++tok) {
+                const std::size_t dst = (static_cast<std::size_t>(tok) * kvh + head) * hd;
+                const std::size_t src = static_cast<std::size_t>(tok) * hd;
+                std::copy(st.active.keys.begin() + src, st.active.keys.begin() + src + hd, kbuf.begin() + dst);
+                std::copy(st.active.values.begin() + src, st.active.values.begin() + src + hd, vbuf.begin() + dst);
+            }
+        }
+        cudaStream_t s = static_cast<cudaStream_t>(stream);
+        if (impl_->active_k_dev != nullptr) { cudaFree(impl_->active_k_dev); impl_->active_k_dev = nullptr; }
+        if (impl_->active_v_dev != nullptr) { cudaFree(impl_->active_v_dev); impl_->active_v_dev = nullptr; }
+        const std::size_t bytes = kbuf.size() * sizeof(float);
+        if (cudaMalloc(reinterpret_cast<void**>(&impl_->active_k_dev), bytes) != cudaSuccess ||
+            cudaMalloc(reinterpret_cast<void**>(&impl_->active_v_dev), bytes) != cudaSuccess) {
+            throw std::runtime_error("failed to allocate active KV tail on device");
+        }
+        cudaMemcpyAsync(impl_->active_k_dev, kbuf.data(), bytes, cudaMemcpyHostToDevice, s);
+        cudaMemcpyAsync(impl_->active_v_dev, vbuf.data(), bytes, cudaMemcpyHostToDevice, s);
+        if (s == nullptr) cudaStreamSynchronize(nullptr);
+        view.active_k = impl_->active_k_dev;
+        view.active_v = impl_->active_v_dev;
+        view.active_token_begin = h0.active.token_begin;
+        view.active_token_count = active_tokens;
     }
     return view;
 }

@@ -4,7 +4,7 @@ CXX ?= g++
 BUILD ?= build
 COMMON_NVCC = -O2 -std=c++17 -arch=$(ARCH) -Iinclude -lineinfo -Xcompiler=-Wall,-Wextra,-Werror
 
-.PHONY: gpu-fixture-test gpu-correctness gpu-sanitize gpu-benchmark gpu-validation-clean
+.PHONY: gpu-fixture-test gpu-correctness gpu-cache-roundtrip gpu-sanitize gpu-benchmark gpu-validation-clean
 
 gpu-fixture-test:
 	@mkdir -p $(BUILD)
@@ -19,6 +19,17 @@ $(BUILD)/paged_kv_cuda_correctness:
 
 gpu-correctness: $(BUILD)/paged_kv_cuda_correctness
 	$(BUILD)/paged_kv_cuda_correctness
+
+$(BUILD)/cache_roundtrip_attention:
+	@mkdir -p $(BUILD)
+	$(NVCC) $(COMMON_NVCC) tests/cache_roundtrip_attention.cu \
+		src/runtime/compressed_kv_cache.cu src/runtime/kv_gpu_fixture.cpp \
+		src/cuda/kv_cuda_owner.cu src/cuda/paged_kv_attention.cu -o $@
+
+# Round-trip: append into CompressedKvCache -> attention_view (sealed pages + active tail) -> paged attention,
+# vs a dense CPU reference over the same stored values. Proves the appended KV round-trips (append-step gate).
+gpu-cache-roundtrip: $(BUILD)/cache_roundtrip_attention
+	$(BUILD)/cache_roundtrip_attention
 
 gpu-sanitize: $(BUILD)/paged_kv_cuda_correctness
 	compute-sanitizer --tool memcheck --error-exitcode 1 $(BUILD)/paged_kv_cuda_correctness
