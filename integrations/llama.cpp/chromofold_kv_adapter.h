@@ -49,6 +49,21 @@ int cf_llama_kv_append(cf_llama_kv_adapter * adapter,
                        uint32_t token_count,
                        void * stream);
 
+/* Serve attention for one layer from the compressed cache (sealed pages + active tail).
+ * queries/output are device pointers, layout [query_count, query_head_count, head_dim].
+ * Query head h maps to kv head floor(h / gqa_group_size); causal_window 0 == full causal. */
+int cf_llama_kv_attention(cf_llama_kv_adapter * adapter,
+                          uint32_t layer,
+                          const float * queries_device,
+                          float * output_device,
+                          uint32_t query_count,
+                          uint32_t query_head_count,
+                          uint32_t gqa_group_size,
+                          uint32_t query_token_begin,
+                          float softmax_scale,
+                          uint32_t causal_window,
+                          void * stream);
+
 int cf_llama_kv_flush(cf_llama_kv_adapter * adapter, void * stream);
 int cf_llama_kv_seq_rm(cf_llama_kv_adapter * adapter, uint64_t sequence_id);
 int cf_llama_kv_seq_cp(cf_llama_kv_adapter * adapter, uint64_t source_id, uint64_t destination_id);

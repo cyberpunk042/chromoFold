@@ -1,14 +1,17 @@
 #include "chromofold_kv_adapter.h"
 
 #include "chromofold/compressed_kv_cache.hpp"
+#include "chromofold/kv_cuda.h"
 
 #include <exception>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 struct cf_llama_kv_adapter {
     std::unique_ptr<chromofold::CompressedKvCache> cache;
     std::string last_error;
+    uint32_t head_dim = 0;
 };
 
 namespace {
@@ -57,6 +60,7 @@ extern "C" cf_llama_kv_adapter* cf_llama_kv_create(const cf_llama_kv_options* op
     try {
         auto adapter = std::make_unique<cf_llama_kv_adapter>();
         adapter->cache = std::make_unique<chromofold::CompressedKvCache>(to_config(*options));
+        adapter->head_dim = options->head_dim;
         return adapter.release();
     } catch (...) {
         return nullptr;
@@ -74,6 +78,51 @@ extern "C" int cf_llama_kv_append(cf_llama_kv_adapter* adapter,
                                     uint32_t token_count,
                                     void* stream) {
     return guarded(adapter, [&] { adapter->cache->append(layer, kv_head, token_begin, keys, values, token_count, stream); });
+}
+
+// Serve attention for one layer from the compressed cache. queries/output are device pointers with layout
+// [query_count, query_head_count, head_dim]; query head h maps to kv head floor(h / gqa_group_size). Covers
+// sealed pages + the active tail (via attention_view). causal_window 0 == full causal.
+extern "C" int cf_llama_kv_attention(cf_llama_kv_adapter* adapter,
+                                     uint32_t layer,
+                                     const float* queries_device,
+                                     float* output_device,
+                                     uint32_t query_count,
+                                     uint32_t query_head_count,
+                                     uint32_t gqa_group_size,
+                                     uint32_t query_token_begin,
+                                     float softmax_scale,
+                                     uint32_t causal_window,
+                                     void* stream) {
+    return guarded(adapter, [&] {
+        if (queries_device == nullptr || output_device == nullptr || gqa_group_size == 0 ||
+            query_head_count == 0 || query_head_count % gqa_group_size != 0) {
+            throw std::invalid_argument("invalid ChromoFold attention request");
+        }
+        chromofold::KvAttentionView view = adapter->cache->attention_view(layer, stream);
+        cf_kv_paged_attention_desc desc{};
+        desc.struct_size = sizeof(desc);
+        desc.abi_version = CF_KV_CUDA_ABI_VERSION;
+        desc.pages = view.device_descriptors;
+        desc.page_count = view.page_count;
+        desc.kv_head_count = query_head_count / gqa_group_size;
+        desc.query_head_count = query_head_count;
+        desc.gqa_group_size = gqa_group_size;
+        desc.active_k = view.active_k;
+        desc.active_v = view.active_v;
+        desc.active_token_begin = view.active_token_begin;
+        desc.active_token_count = view.active_token_count;
+        desc.queries = queries_device;
+        desc.output = output_device;
+        desc.query_token_begin = query_token_begin;
+        desc.query_count = query_count;
+        desc.head_dim = adapter->head_dim;
+        desc.causal_window = causal_window;
+        desc.softmax_scale = softmax_scale;
+        if (cf_kv_paged_attention_async(&desc, stream) != CF_OK) {
+            throw std::runtime_error("ChromoFold paged attention launch rejected");
+        }
+    });
 }
 
 extern "C" int cf_llama_kv_flush(cf_llama_kv_adapter* adapter, void* stream) {
