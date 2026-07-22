@@ -3,32 +3,105 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="ChromoFold keeps AI-serving data compressed in GPU memory while kernels use it directly.">
+  <meta name="description" content="ChromoFold is a GPU-native compressed-compute platform for inspecting, configuring and qualifying memory-efficient AI workloads.">
+  <meta name="theme-color" content="#07101c">
+  <meta property="og:title" content="ChromoFold — use compressed AI data directly on the GPU">
+  <meta property="og:description" content="Inspect your machine, choose a safe profile, generate local files, and prove whether the workload improved.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://cyberpunk042.github.io/chromoFold/">
   <title>ChromoFold — compressed compute for AI</title>
+  <link rel="canonical" href="https://cyberpunk042.github.io/chromoFold/">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header class="nav"><a class="brand" href="#top">ChromoFold</a><nav><a href="#how">How it works</a><a href="#results">Evidence</a><a href="#start">Get started</a><a href="#downloads">Downloads</a></nav></header>
-<main id="top">
-<section class="hero">
-  <p class="eyebrow">GPU-native compressed compute</p>
-  <h1>Run more AI on the GPU you already own.</h1>
-  <p class="lead">ChromoFold keeps weights, KV caches and repetitive serving data compressed in VRAM while GPU kernels access only the values they need. No full decompressed tensor is required.</p>
-  <div class="actions"><a class="primary" href="#start">Try the guided setup</a><a class="secondary" href="#results">See what is proven</a></div>
-  <div class="boundary">Measured kernel results are not the same as qualified production results. Every claim below carries an evidence level.</div>
+<a class="skip" href="#content">Skip to content</a>
+<header class="nav">
+  <a class="brand" href="#top"><span class="mark">CF</span> ChromoFold</a>
+  <nav aria-label="Primary navigation">
+    <a href="#how">How it works</a>
+    <a href="#results">Evidence</a>
+    <a href="#start">Configure</a>
+    <a href="#downloads">Download</a>
+    <a href="#faq">FAQ</a>
+  </nav>
+  <a class="github" href="https://github.com/cyberpunk042/chromoFold">GitHub ↗</a>
+</header>
+<main id="content">
+<section id="top" class="hero">
+  <div class="hero-copy">
+    <p class="eyebrow">GPU-native compressed compute</p>
+    <h1>Use more AI state without materializing all of it.</h1>
+    <p class="lead">ChromoFold keeps weights, KV caches and repetitive serving data compact in VRAM while fused GPU operations decode only what they consume.</p>
+    <div class="actions">
+      <a class="primary" href="#start">Build a starter plan</a>
+      <a class="secondary" href="#downloads">Download locally</a>
+    </div>
+    <ul class="trust-row" aria-label="Project principles">
+      <li>Local-first</li><li>Silent fallback disabled</li><li>Digest-bound qualification</li><li>Open evidence</li>
+    </ul>
+  </div>
+  <aside class="status-panel" aria-label="Release status">
+    <p class="eyebrow">Current channel</p>
+    <div id="release-status">Loading release contract…</div>
+  </aside>
 </section>
+
 <section id="how" class="section">
-  <p class="eyebrow">The simple explanation</p><h2>Like a ZIP file the GPU can use without unzipping.</h2>
-  <div class="flow"><article><h3>Traditional</h3><p>Compressed data → full decompression → large temporary tensor → computation.</p></article><article><h3>ChromoFold</h3><p>Compressed data → decode a needed value in registers → consume immediately.</p></article></div>
-  <p>ChromoFold trades inexpensive decoding work for lower VRAM residency and less memory traffic. It is most promising where the avoided intermediate is large, the workload is memory-bound, or only a sparse subset is consumed.</p>
+  <div class="section-head"><div><p class="eyebrow">The mechanism</p><h2>Decode at the point of use.</h2></div><p>Compression is useful only when the runtime avoids reconstructing the large object it was meant to save.</p></div>
+  <div class="flow">
+    <article class="flow-card muted"><span>Traditional</span><h3>Materialize first</h3><p>Compressed data → full decompression → large temporary tensor → computation.</p></article>
+    <div class="arrow" aria-hidden="true">versus</div>
+    <article class="flow-card accent"><span>ChromoFold</span><h3>Consume directly</h3><p>Compressed block → decode a needed value in registers → consume immediately.</p></article>
+  </div>
+  <div class="principles">
+    <article><strong>Capacity</strong><p>Fit more context, requests or model-serving state into a fixed VRAM budget.</p></article>
+    <article><strong>Traffic</strong><p>Reduce expensive GPU-memory movement when extra arithmetic is cheaper.</p></article>
+    <article><strong>Sharing</strong><p>Represent common prompt state once instead of duplicating it per request.</p></article>
+    <article><strong>Proof</strong><p>Keep estimates, measurements, qualification and external reproduction distinct.</p></article>
+  </div>
 </section>
-<section id="results" class="section dark"><p class="eyebrow">Evidence, not slogans</p><h2>What has actually been measured</h2><div id="claims" class="cards"></div><p class="note">Hardware, implementation and benchmark details remain part of each claim. End-to-end superiority requires exact-workload qualification and independent reproduction.</p></section>
-<section id="start" class="section"><p class="eyebrow">Guided setup</p><h2>Describe the workload. Get a safe plan.</h2><form id="estimator">
-<label>Goal<select id="goal"><option value="longer-context">Longer context</option><option value="more-users">More concurrent users</option><option value="shared-prefix">Shared prompts</option><option value="balanced">Balanced</option><option value="lowest-risk">Lowest risk</option></select></label>
-<label>GPU VRAM (GB)<input id="vram" type="number" min="1" value="24"></label><label>Context tokens<input id="context" type="number" min="1" value="65536"></label><label>Concurrent requests<input id="concurrency" type="number" min="1" value="4"></label><button type="submit">Build a starter plan</button></form><div id="plan" class="plan">The browser estimator is advisory. The local Assistant inspects the real machine and generates reviewable files.</div></section>
-<section id="downloads" class="section"><p class="eyebrow">Download and verify</p><h2>Start local. Keep control.</h2><div id="downloads-list" class="cards"></div><div class="commands"><code>python3 hub/server.py</code><code>python3 tools/chromofold.py inspect --json</code><code>python3 tools/chromofold_assistant.py</code></div></section>
-<section class="section"><p class="eyebrow">Proof path</p><h2>How a recommendation becomes a claim</h2><ol class="proof"><li>Inspect the exact machine.</li><li>Generate a profile with silent fallback disabled.</li><li>Run the baseline and ChromoFold workload with identical inputs.</li><li>Compare capacity, latency, throughput, VRAM and correctness.</li><li>Run RC1 qualification for the exact artifact digest.</li><li>Publish only PASS evidence; preserve FAIL and INCOMPLETE.</li></ol></section>
+
+<section id="results" class="section dark">
+  <div class="section-head"><div><p class="eyebrow">Evidence, not slogans</p><h2>Measured results with visible boundaries.</h2></div><label class="filter">Evidence level<select id="evidence-filter"><option value="all">All evidence</option><option value="measured">Measured</option><option value="qualified">Qualified</option><option value="independently-reproduced">Independently reproduced</option></select></label></div>
+  <div id="claims" class="cards"></div>
+  <p class="note">A kernel result is not automatically an end-to-end serving win. Hardware, scope and caveats remain attached to every claim.</p>
+</section>
+
+<section id="start" class="section">
+  <div class="section-head"><div><p class="eyebrow">Guided configuration</p><h2>Start with a goal, then verify locally.</h2></div><p>The browser planner is advisory. The downloadable Assistant performs real inspection and generates reviewable configuration files.</p></div>
+  <form id="estimator">
+    <label>Primary goal<select id="goal"><option value="longer-context">Longer context</option><option value="more-users">More concurrent users</option><option value="shared-prefix">Shared prompts</option><option value="balanced">Balanced</option><option value="lowest-risk">Lowest risk</option></select></label>
+    <label>GPU VRAM (GB)<input id="vram" type="number" min="1" max="1024" value="24" required></label>
+    <label>Context tokens<input id="context" type="number" min="1" value="65536" required></label>
+    <label>Concurrent requests<input id="concurrency" type="number" min="1" value="4" required></label>
+    <button type="submit">Build starter plan</button>
+  </form>
+  <div id="plan" class="plan"><strong>No estimate yet.</strong><p>Enter the intended workload. No values leave the browser.</p></div>
+</section>
+
+<section id="downloads" class="section">
+  <div class="section-head"><div><p class="eyebrow">Download and verify</p><h2>One archive. Explicit integrity.</h2></div><p>Release candidates carry a manifest, archive checksum, SPDX SBOM and provenance record.</p></div>
+  <div id="downloads-list" class="cards"></div>
+  <div class="verification">
+    <div><h3>Verify the release</h3><code>sha256sum --check SHA256SUMS</code><p>Then inspect the provenance file and confirm its archive digest matches the qualification evidence.</p></div>
+    <div><h3>Run locally</h3><code>./chromofold-hub</code><code>python3 tools/chromofold.py inspect --json</code><p>The Hub binds to loopback by default and machine details remain local.</p></div>
+  </div>
+</section>
+
+<section class="section proof-section">
+  <p class="eyebrow">From recommendation to defensible claim</p><h2>Six gates prevent accidental marketing.</h2>
+  <ol class="proof"><li><span>1</span><div><strong>Inspect</strong><p>Capture the exact machine, driver, CUDA and runtime.</p></div></li><li><span>2</span><div><strong>Configure</strong><p>Generate a profile with silent fallback disabled.</p></div></li><li><span>3</span><div><strong>Baseline</strong><p>Run the original workload with identical inputs.</p></div></li><li><span>4</span><div><strong>Compare</strong><p>Measure capacity, latency, throughput, peak VRAM and correctness.</p></div></li><li><span>5</span><div><strong>Qualify</strong><p>Bind PASS evidence to the exact release digest.</p></div></li><li><span>6</span><div><strong>Publish honestly</strong><p>Preserve FAIL and INCOMPLETE; label independent results separately.</p></div></li></ol>
+</section>
+
+<section id="faq" class="section faq">
+  <p class="eyebrow">Frequently asked</p><h2>What ChromoFold is—and is not.</h2>
+  <details><summary>Is this just ordinary compression?</summary><p>No. The central goal is to keep selected serving data compact while the consuming GPU operation decodes values at use time, avoiding a full temporary tensor.</p></details>
+  <details><summary>Does ChromoFold make every workload faster?</summary><p>No. It targets memory-bound, capacity-bound, sparse and highly repetitive workloads. Decode overhead can lose when avoided data is small or the kernel is compute-bound.</p></details>
+  <details><summary>Are the headline results production-qualified?</summary><p>The public registry currently labels repository kernel benchmarks as measured. Production claims require exact-runtime, exact-digest hardware qualification.</p></details>
+  <details><summary>Does the public planner inspect my computer?</summary><p>No. It runs entirely in the browser. Real machine inspection is performed only by the downloaded local CLI and Hub.</p></details>
+</section>
 </main>
-<footer>ChromoFold is open engineering: measured claims, visible caveats, reproducible evidence.</footer>
+<footer><div><strong>ChromoFold</strong><p>Compressed compute, visible caveats, reproducible evidence.</p></div><div><a href="https://github.com/cyberpunk042/chromoFold">Source</a><a href="https://github.com/cyberpunk042/chromoFold/releases">Releases</a><a href="https://github.com/cyberpunk042/chromoFold/issues">Issues</a></div></footer>
 <script src="app.js" defer></script>
-</body></html>
+</body>
+</html>
