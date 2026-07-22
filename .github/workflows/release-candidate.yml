@@ -1,6 +1,13 @@
 name: ChromoFold release candidate
 
 on:
+  pull_request:
+    paths:
+      - "product/release-channel.json"
+      - "tools/build_release_candidate.py"
+      - "tools/build_product_bundle.py"
+      - "tests/test_release_candidate.py"
+      - ".github/workflows/release-candidate.yml"
   workflow_dispatch:
     inputs:
       version:
@@ -16,6 +23,9 @@ on:
 permissions:
   contents: read
 
+env:
+  RELEASE_VERSION: ${{ inputs.version || format('ci-{0}', github.sha) }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,22 +40,22 @@ jobs:
         run: |
           make -f product-assistant.mk product-all
           make -f assistant.mk assistant-all
-          make -f hub.mk hub-all VERSION="${{ inputs.version }}"
+          make -f hub.mk hub-all VERSION="$RELEASE_VERSION"
           make -f site.mk site-all
           python3 tests/test_release_candidate.py
       - name: Build release candidate assets
-        run: python3 tools/build_release_candidate.py --version "${{ inputs.version }}" --output dist/release
+        run: python3 tools/build_release_candidate.py --version "$RELEASE_VERSION" --output dist/release
       - name: Verify checksums
         working-directory: dist/release
         run: sha256sum --check SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: chromofold-${{ inputs.version }}-release-candidate
+          name: chromofold-${{ env.RELEASE_VERSION }}-release-candidate
           path: dist/release/*
           if-no-files-found: error
 
   publish:
-    if: inputs.publish
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -53,13 +63,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: chromofold-${{ inputs.version }}-release-candidate
+          name: chromofold-${{ env.RELEASE_VERSION }}-release-candidate
           path: dist/release
       - name: Publish immutable prerelease assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.version }}
-          name: ChromoFold ${{ inputs.version }}
+          tag_name: ${{ env.RELEASE_VERSION }}
+          name: ChromoFold ${{ env.RELEASE_VERSION }}
           prerelease: true
           generate_release_notes: true
           fail_on_unmatched_files: true
