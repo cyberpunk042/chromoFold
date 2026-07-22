@@ -1,0 +1,36 @@
+name: Negative or conflicting result
+description: Report where ChromoFold loses, fails, or conflicts with an existing claim.
+title: "[negative-result] "
+labels: ["evidence", "negative-result"]
+body:
+  - type: markdown
+    attributes:
+      value: "Negative results are first-class evidence. Please preserve the exact workload and include raw artifacts."
+  - type: textarea
+    id: environment
+    attributes: {label: Environment, description: "Hardware, OS, driver, CUDA, runtime, source revision and artifact digest."}
+    validations: {required: true}
+  - type: textarea
+    id: workload
+    attributes: {label: Workload and commands, render: shell}
+    validations: {required: true}
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Outcome
+      options: ["Slower than baseline", "More memory than baseline", "Incorrect output", "Runtime failure", "Qualification incomplete", "Conflicts with published claim"]
+    validations: {required: true}
+  - type: textarea
+    id: evidence
+    attributes: {label: Raw results and artifact links}
+    validations: {required: true}
+  - type: textarea
+    id: hypothesis
+    attributes: {label: Suspected cause, description: "Decode overhead, locality, metadata, divergence, scheduling, allocator behavior, integration bug, or unknown."}
+  - type: checkboxes
+    id: matched
+    attributes:
+      label: Baseline matching
+      options:
+        - label: Model, inputs, runtime settings and measurement window were matched or deviations are documented.
+          required: true

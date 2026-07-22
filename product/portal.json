@@ -1,0 +1,18 @@
+{
+  "schema": "chromofold.portal.v1",
+  "reproduction_fields": [
+    "Exact GPU model and VRAM",
+    "Driver, CUDA, operating system and runtime versions",
+    "Immutable source revision and artifact SHA-256",
+    "Model identity and digest",
+    "Complete baseline and ChromoFold commands",
+    "Raw correctness, latency, throughput and VRAM artifacts",
+    "Known deviations, failures and incomplete scenarios"
+  ],
+  "contribution_paths": [
+    {"name": "Reproduce", "description": "Run an existing claim on new hardware and publish auditable artifacts."},
+    {"name": "Integrate", "description": "Add a runtime adapter with scenario hooks, correctness references and a qualification plan."},
+    {"name": "Challenge", "description": "Report negative or conflicting results without removing earlier evidence."},
+    {"name": "Explain", "description": "Improve technical communication while preserving evidence boundaries."}
+  ]
+}
