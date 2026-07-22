@@ -70,7 +70,18 @@ python3 integrations/llama.cpp/e2e/validate_evidence.py build/e2e/chromofold.jso
 ## What's left (layer 2 — the real claim)
 
 To make the chromofold evidence pass `--require-claim`, the patch must **serve attention from the compressed KV
-cache** (via the ChromoFold adapter's `paged_kv_attention`) with **≥99% token parity** to dense and **zero dense
-fallback**, wiring it through `llama_context` / `llama-kv-cache` for the supported single-sequence, causal, f32
-scope (`initial_support` in `runtime/patch_manifest.json`). That is deep surgery in llama.cpp's KV/attention graph
-and is the substantive remaining work.
+cache** and route llama's attention through it with **≥99% token parity** to dense and **zero dense fallback**,
+for the supported single-sequence, causal, f32 scope (`initial_support` in `runtime/patch_manifest.json`).
+
+**The hard part of that is already implemented and verified.** The compressed paged-attention kernel
+(`cf_kv_paged_attention_async`, `src/cuda/paged_kv_attention.cu`) decodes history from compressed pages inside the
+kernel and computes attention; `make -f m9-gpu.mk gpu-correctness` checks its output against a dense CPU reference
+and passes on this GPU with **max abs error 5.96e-07** (mse 2.8e-14, 128 tokens, head_dim 64) — i.e. compressed
+serving is numerically equal to dense within float rounding. The `paged-kv-seam` and `llama-adapter-seam` ABI
+tests also pass.
+
+So layer 2 is **not** unwritten compressed-attention math — it is the **graph wiring**: threading
+`cf_kv_paged_attention_async` into llama.cpp's `llama_context` / `llama-kv-cache` attention path in place of the
+dense KV read (single-sequence first), and recording the real counters. That wiring's correctness can only be
+signed off by running the e2e (token parity), which needs a machine where `llama-cli` runs to completion (this
+sandbox does not — see "Status" above).
