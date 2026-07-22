@@ -70,33 +70,66 @@ __global__ void paged_attention_kernel(cf_kv_paged_attention_desc desc) {
             const uint32_t token = page.token_begin + local;
             if (token < window_begin || token > query_token) continue;
 
-            int k_bit = row_bit_position(page.k_words, page.k_block_offsets, page.k_lut,
-                                         static_cast<int>(page.k_max_code_length),
-                                         static_cast<int>(page.block_size),
-                                         static_cast<long>(local) * page.head_dim);
             float score = 0.0f;
-            for (uint32_t d = 0; d < desc.head_dim; ++d) {
-                const int symbol_length = cf_bh_decode_at(page.k_words, page.k_lut,
-                                                          static_cast<int>(page.k_max_code_length), k_bit);
-                const int quantized = symbol_length & 0xff;
-                k_bit += symbol_length >> 8;
-                score += query[d] * (static_cast<float>(quantized - static_cast<int>(page.zero_point)) *
-                                     page.k_scales[d]);
+            if (page.fixed_code_length) {
+                // Fixed-width fast path: read each 32-bit word once (a symbol never crosses a word since bits|32),
+                // extract head_dim symbols directly; the row's start bit is exact (no forward decode).
+                const uint32_t bits = page.fixed_code_length;
+                const uint32_t mask = (1u << bits) - 1u;
+                const long bit0 = static_cast<long>(local) * page.head_dim * bits;
+                uint32_t widx = static_cast<uint32_t>(bit0 >> 5);
+                uint32_t word = page.k_words[widx];
+                for (uint32_t d = 0; d < desc.head_dim; ++d) {
+                    const long bit = bit0 + static_cast<long>(d) * bits;
+                    const uint32_t wi = static_cast<uint32_t>(bit >> 5);
+                    if (wi != widx) { widx = wi; word = page.k_words[wi]; }
+                    const uint32_t shift = (32u - bits) - static_cast<uint32_t>(bit & 31);
+                    const int quantized = static_cast<int>((word >> shift) & mask);
+                    score += query[d] * (static_cast<float>(quantized - static_cast<int>(page.zero_point)) * page.k_scales[d]);
+                }
+            } else {
+                int k_bit = row_bit_position(page.k_words, page.k_block_offsets, page.k_lut,
+                                             static_cast<int>(page.k_max_code_length),
+                                             static_cast<int>(page.block_size),
+                                             static_cast<long>(local) * page.head_dim);
+                for (uint32_t d = 0; d < desc.head_dim; ++d) {
+                    const int symbol_length = cf_bh_decode_at(page.k_words, page.k_lut,
+                                                              static_cast<int>(page.k_max_code_length), k_bit);
+                    const int quantized = symbol_length & 0xff;
+                    k_bit += symbol_length >> 8;
+                    score += query[d] * (static_cast<float>(quantized - static_cast<int>(page.zero_point)) * page.k_scales[d]);
+                }
             }
             score *= desc.softmax_scale;
 
             float value[CF_KV_MAX_HEAD_DIM];
-            int v_bit = row_bit_position(page.v_words, page.v_block_offsets, page.v_lut,
-                                         static_cast<int>(page.v_max_code_length),
-                                         static_cast<int>(page.block_size),
-                                         static_cast<long>(local) * page.head_dim);
             const float v_scale = page.v_scales[local];
-            for (uint32_t d = 0; d < desc.head_dim; ++d) {
-                const int symbol_length = cf_bh_decode_at(page.v_words, page.v_lut,
-                                                          static_cast<int>(page.v_max_code_length), v_bit);
-                const int quantized = symbol_length & 0xff;
-                v_bit += symbol_length >> 8;
-                value[d] = static_cast<float>(quantized - static_cast<int>(page.zero_point)) * v_scale;
+            if (page.fixed_code_length) {
+                const uint32_t bits = page.fixed_code_length;
+                const uint32_t mask = (1u << bits) - 1u;
+                const long bit0 = static_cast<long>(local) * page.head_dim * bits;
+                uint32_t widx = static_cast<uint32_t>(bit0 >> 5);
+                uint32_t word = page.v_words[widx];
+                for (uint32_t d = 0; d < desc.head_dim; ++d) {
+                    const long bit = bit0 + static_cast<long>(d) * bits;
+                    const uint32_t wi = static_cast<uint32_t>(bit >> 5);
+                    if (wi != widx) { widx = wi; word = page.v_words[wi]; }
+                    const uint32_t shift = (32u - bits) - static_cast<uint32_t>(bit & 31);
+                    const int quantized = static_cast<int>((word >> shift) & mask);
+                    value[d] = static_cast<float>(quantized - static_cast<int>(page.zero_point)) * v_scale;
+                }
+            } else {
+                int v_bit = row_bit_position(page.v_words, page.v_block_offsets, page.v_lut,
+                                             static_cast<int>(page.v_max_code_length),
+                                             static_cast<int>(page.block_size),
+                                             static_cast<long>(local) * page.head_dim);
+                for (uint32_t d = 0; d < desc.head_dim; ++d) {
+                    const int symbol_length = cf_bh_decode_at(page.v_words, page.v_lut,
+                                                              static_cast<int>(page.v_max_code_length), v_bit);
+                    const int quantized = symbol_length & 0xff;
+                    v_bit += symbol_length >> 8;
+                    value[d] = static_cast<float>(quantized - static_cast<int>(page.zero_point)) * v_scale;
+                }
             }
             online_add(score, value, static_cast<int>(desc.head_dim), &maximum, &sum, weighted, &initialized);
         }

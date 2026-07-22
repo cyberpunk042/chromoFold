@@ -12,6 +12,7 @@ struct EncodedStream {
     std::vector<std::int32_t> lut;
     std::uint32_t max_code_length = 4;
     std::uint32_t block_size = 64;
+    std::uint32_t fixed_width = 0;  // >0: every code is exactly this many bits (fast direct decode); 0: variable
 };
 
 struct EncodedKvPage {

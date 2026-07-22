@@ -78,6 +78,7 @@ DeviceKvPage DeviceKvPage::upload(const gpu_fixture::EncodedKvPage& page, void* 
     result.descriptor_.v_max_code_length = page.v.max_code_length;
     result.descriptor_.zero_point = page.zero_point;
     result.descriptor_.kv_head = page.kv_head;
+    result.descriptor_.fixed_code_length = page.k.fixed_width;  // K and V share the codec width in this fixture
     result.resident_bytes_ = page.resident_bytes();
     return result;
 }

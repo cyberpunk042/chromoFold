@@ -22,6 +22,7 @@ EncodedStream encode_symbols(const std::vector<std::uint8_t>& symbols, std::uint
     EncodedStream out;
     out.block_size = block_size;
     out.max_code_length = bits;
+    out.fixed_width = bits;  // this fixture emits fixed-width codes -> enables the kernel's direct-decode fast path
     const std::uint32_t levels = 1u << bits;
     const std::uint32_t mask = levels - 1u;
     out.lut.resize(levels);

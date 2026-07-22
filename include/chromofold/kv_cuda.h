@@ -37,6 +37,7 @@ typedef struct cf_kv_device_page {
     uint32_t v_max_code_length;
     uint32_t zero_point;
     uint32_t kv_head;
+    uint32_t fixed_code_length;  /* >0: K and V codes are exactly this many bits -> direct-decode fast path; 0: LUT */
 } cf_kv_device_page;
 
 /* Launch description for one layer across a batch of query tokens.
