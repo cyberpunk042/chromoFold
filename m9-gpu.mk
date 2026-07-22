@@ -4,7 +4,7 @@ CXX ?= g++
 BUILD ?= build
 COMMON_NVCC = -O2 -std=c++17 -arch=$(ARCH) -Iinclude -lineinfo -Xcompiler=-Wall,-Wextra,-Werror
 
-.PHONY: gpu-fixture-test gpu-correctness gpu-cache-roundtrip gpu-adapter-attention gpu-sanitize gpu-benchmark gpu-validation-clean
+.PHONY: gpu-fixture-test gpu-correctness gpu-cache-roundtrip gpu-adapter-attention gpu-quantizer-frontier gpu-sanitize gpu-benchmark gpu-validation-clean
 
 gpu-fixture-test:
 	@mkdir -p $(BUILD)
@@ -42,6 +42,15 @@ $(BUILD)/adapter_attention_test:
 # vs a dense CPU reference. This is exactly the cf_llama_kv_attention call the replace callback makes.
 gpu-adapter-attention: $(BUILD)/adapter_attention_test
 	$(BUILD)/adapter_attention_test
+
+$(BUILD)/quantizer_frontier:
+	@mkdir -p $(BUILD)
+	$(CXX) -O2 -std=c++17 -Wall -Wextra -Werror tests/quantizer_frontier.cpp -o $@
+
+# Host-only: int4 vs int8 KV-attention error against a full-precision reference (engine's exact quant scheme).
+# Confirms the live M9 int4 diff (~0.034) IS the quantizer's cost and shrinks ~18x at int8 (reducibility, measured).
+gpu-quantizer-frontier: $(BUILD)/quantizer_frontier
+	$(BUILD)/quantizer_frontier
 
 gpu-sanitize: $(BUILD)/paged_kv_cuda_correctness
 	compute-sanitizer --tool memcheck --error-exitcode 1 $(BUILD)/paged_kv_cuda_correctness

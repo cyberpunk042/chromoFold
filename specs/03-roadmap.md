@@ -326,12 +326,42 @@ as a plain array than as deltas (the win here is the shared prefix, not the suff
 **TTFT / prefill / max-batch-at-fixed-budget** numbers need a real serving runtime — that is the M9 integration,
 env-gated here. What is proven is the memory model (resident + per-turn cost) and bit-exact reconstruction.
 
-## M9 — Integrate with one real inference path (the ship criterion, P10)
+## M9 — Integrate with one real inference path (the ship criterion, P10) — ◐ IN PROGRESS (compressed attention serves a live llama-server)
 **Goal.** Wire the KV path into one real runtime (start with the `transformers` `Cache` adapter already built;
 target vLLM/llama.cpp KV hooks next) and measure **batch capacity / context length / TTFT / end-to-end
 throughput** at equal VRAM.
 **Acceptance.** A **larger batch or longer context fits in the same GPU memory at equal-or-better latency**, with
 output quality intact. This is the decisive proof (P10).
+
+**Done so far (llama.cpp path, RTX 2080 Ti, `qwen2.5-0.5b`).** The ChromoFold compressed-KV engine is compiled and
+**linked into a working `llama-server`** (`GGML_CHROMOFOLD`), and a ggml graph-eval callback (`cb_eval`) drives it —
+env-gated, no fork of llama's graph builder. Three modes, all verified:
+- **append** — ingests the live model's K/V into the compressed cache during real generation. Generation stays
+  **byte-identical to dense** (pure shadow); on a short run 96 int4 pages sealed, **5.6× vs f32 / 2.8× vs f16**, 0
+  errors. (`17acab4`)
+- **replace** — serves attention **from the compressed cache in-graph**, overwriting the pre-`wo` `kqv_out`
+  (`cf_llama_kv_attention` + host wrapper). 600 compressed-attention launches, zero dense fallback. (`27dafd8`)
+- The whole append→attention path (sealed pages + active tail) is proven **bit-exact to a dequantized reference at
+  1e-7** in isolation — `make -f m9-gpu.mk gpu-cache-roundtrip` / `gpu-adapter-attention`. (`e9e709e`,`ecec857`)
+
+**The honest headline (P4/P7): addressing is lossless; the int4 quantizer is the accuracy cost — measured.**
+Comparing compressed-cache attention to llama's *own* dense `kqv_out` on the live model:
+
+| path | attn diff vs dense | isolates |
+|---|---|---|
+| raw f32 active tail | **mean 1.2e-4** | the addressing machinery (correct) |
+| int4 sealed pages | **mean 0.034 / max 1.75** | the KIVI int4 quantizer's cost |
+
+The precision trend confirms correctness (identical replace-vs-dense token prefix grows q2_k ~3 → q8_0 ~13 tokens).
+A host quantizer study (`gpu-quantizer-frontier`) reproduces the int4 error (**0.030**, matching the live 0.034) and
+shows **int8 shrinks it ~18× to 0.0017** — the quantizer cost is real and reducible, separable from addressing.
+**Consequence:** exact greedy token parity is the wrong gate for a lossy-KV method; `--require-claim` should assert
+*compressed attention exercised + zero dense fallback* (met) **plus a tolerance on the attention diff**, not `==`.
+See [`integrations/llama.cpp/runtime/CLI_EVIDENCE_PATCH.md`](../integrations/llama.cpp/runtime/CLI_EVIDENCE_PATCH.md).
+
+**Remaining for the P10 ship criterion:** the *capacity* proof — larger batch / longer context at equal VRAM with
+quality intact — plus multi-ubatch/sequence-management robustness (current position-alignment covers single-ubatch
+`initial_support`), and an int8 (or finer) quantizer variant to bring the accuracy cost under a chosen tolerance.
 
 ## M10 — Rust wrapper (only now)
 **Goal.** Add the Rust safe-systems layer (parsing, integrity, mmap, corpus, CLI, server glue) over the C ABI —
