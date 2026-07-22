@@ -113,3 +113,51 @@ verifiable here:
    evidence (the memory win, on a real model).
 2. **Replace** — on `kqv_out-L`, run `cf_kv_paged_attention_async(Qcur, pages)` and overwrite the output buffer;
    check token parity via `run_pair_server.py --parallel 1` → this is what flips `--require-claim` to a real pass.
+
+## Layer 2 — append: **landed and verified on the live model** (2026-07-22)
+
+The append increment is implemented and runs inside a real `llama-server`. The ChromoFold compressed-KV
+engine is now **compiled and linked into `llama-server`** and the graph-eval callback drives it.
+
+**Build integration** (reproducible):
+1. `bash integrations/llama.cpp/runtime/build_kv_lib.sh` — precompiles the engine (`chromofold_kv_adapter`,
+   `compressed_kv_cache.cu`, `kv_cuda_owner.cu`, `paged_kv_attention.cu`, `kv_gpu_fixture`) into a **`-fPIC`
+   static lib** with nvcc, so the CUDA language never has to be enabled in llama's CMake scope (and PIC is
+   required because `llama-common` is a shared lib).
+2. `common/CMakeLists.txt` — a `GGML_CHROMOFOLD`-guarded block links that `.a` into `llama-common`, adds the
+   repo `include/` + `integrations/llama.cpp/` include dirs, and defines `GGML_CHROMOFOLD`. (The auto-generated
+   `cmake/chromofold-runtime.cmake` from `apply_runtime_patch.py` is **disabled** — it tried to build the engine
+   inside CMake and hit `CUDA::cudart` scope errors; the prebuilt-lib path above replaces it.)
+3. `cmake -S . -B build -DGGML_CHROMOFOLD=ON && cmake --build build --target llama-server`.
+
+**What the callback does** (append mode, `CHROMOFOLD_KV_BACKEND=chromofold`): on each per-layer `Kcur-L` (ROPE)
+and `Vcur-L` (RESHAPE) node — `[head_dim, kv_heads, T]` f32, contiguous — it `ggml_backend_tensor_get`s the rows
+to host, pairs K with V per layer, splits the `head_dim×kv_heads` width into per-kv-head `[T, head_dim]`, and
+`cf_llama_kv_append(...)`s into a lazily-created adapter (config inferred from the observed shape; append-only so
+`gqa=1`). Adapter stats are written to `CHROMOFOLD_KV_STATS_PATH` after every append. It is a **pure shadow** —
+it only *reads* graph tensors, never writes them.
+
+**Verified on `qwen2.5-0.5b-instruct-q2_k` (RTX 2080 Ti, `--parallel 1 --ctx-size 512`, page_size 32):**
+
+| check | result |
+|---|---|
+| generation vs dense (same prompt/seed) | **token-parity IDENTICAL** — 64/64 tokens byte-for-byte (callback is non-perturbing) |
+| append errors / non-finite extractions | **0 / 0** |
+| sealed pages / active | **96 sealed, 0 active** (24 layers × 2 kv-heads × 2 pages of 32) |
+| compressed size | **270 336 B pages + 9 216 B descriptors = 279 KB** |
+| vs dense f32 (`3072·64·2·4`) | **5.6×** smaller |
+| vs dense f16 (llama's usual KV) | **2.8×** smaller |
+
+Evidence: [`integrations/llama.cpp/runtime/append_live_kv_stats.json`](append_live_kv_stats.json).
+
+**Honest scope — what this does *not* yet prove:**
+- **Extraction-layout round-trip.** The finite check rules out NaN/inf, and byte-identical generation proves the
+  shadow doesn't corrupt the graph — but neither proves the *extracted* K/V equal llama's true K/V bit-for-bit (a
+  wrong-but-finite permutation would still compress). The rigorous gate is the **replace** step (route attention
+  through the compressed pages and compare `kqv_out` to dense); the encode/decode itself is already proven by
+  `m9-gpu.mk gpu-correctness` (5.96e-07). Until then this is honestly a **memory measurement over live-but-
+  unverified-layout K/V**, not a verified-correct KV compression.
+- **Prompt-prefill positions.** This run appended exactly the 64 decode steps per (layer, kv-head); the short
+  prompt-prefill batch was not captured (a first-batch pairing detail to chase). Noted, not hidden.
+
+So `--require-claim` still **honestly fails** (compressed attention not yet exercised; that's the replace step).
