@@ -33,7 +33,7 @@ function renderEvidence() {
   const claims = list(DATA.claims).filter((claim) => (level === "all" || claim.evidence_level === level) && (!query || JSON.stringify(claim).toLowerCase().includes(query)));
   target.innerHTML = claims.length ? claims.map(claimCard).join("") : '<p class="empty">No claims match these filters.</p>';
   const summary = $("evidence-summary");
-  if (summary) summary.textContent = `${claims.length} of ${list(DATA.claims).length} claims shown · ${esc(DATA.claim_boundary || "Evidence remains scope-bound.")}`;
+  if (summary) summary.textContent = `${claims.length} of ${list(DATA.claims).length} claims shown · ${DATA.claim_boundary || "Evidence remains scope-bound."}`;
 }
 
 function renderEvidenceLadder() {
@@ -84,6 +84,53 @@ function renderDownloads() { const target = $("downloads-list"); if (!target) re
 function renderReleaseGates() { const target = $("release-gates"); if (!target) return; target.innerHTML = list(DATA.release_channel?.promotion_gates).map((gate,i) => `<article><span>${i+1}</span><div><p>${esc(gate)}</p></div></article>`).join(""); }
 function renderContribute() { const fields = $("reproduction-fields"); if (fields) fields.innerHTML = list(DATA.portal?.reproduction_fields).map((f) => `<div>✓ ${esc(f)}</div>`).join(""); const paths = $("contribution-paths"); if (paths) paths.innerHTML = list(DATA.portal?.contribution_paths).map((p,i) => `<article><span>${i+1}</span><div><h3>${esc(p.name)}</h3><p>${esc(p.description)}</p></div></article>`).join(""); }
 
-setupNav(); releaseStatus(); renderEvidence(); renderEvidenceLadder(); renderCompatibility(); setupPlanner(); renderProfiles(); renderDownloads(); renderReleaseGates(); renderContribute();
+function chartSvg(labels, first, second, firstLabel, secondLabel, unit) {
+  const width = 900, height = 390, left = 64, right = 28, top = 26, bottom = 58;
+  const max = Math.max(...first, ...second) * 1.08;
+  const x = (i) => left + (width - left - right) * i / (labels.length - 1);
+  const y = (value) => height - bottom - (height - top - bottom) * value / max;
+  const points = (values) => values.map((value, i) => `${x(i)},${y(value)}`).join(" ");
+  const grid = [0, .25, .5, .75, 1].map((fraction) => {
+    const value = max * fraction, py = y(value);
+    return `<line x1="${left}" y1="${py}" x2="${width-right}" y2="${py}"/><text x="${left-10}" y="${py+4}" text-anchor="end">${value >= 10 ? value.toFixed(0) : value.toFixed(1)}</text>`;
+  }).join("");
+  const ticks = labels.map((label, i) => `<text x="${x(i)}" y="${height-bottom+24}" text-anchor="middle">${label >= 1024 ? `${label/1024}K` : label}</text>`).join("");
+  return `<svg viewBox="0 0 ${width} ${height}" aria-hidden="true"><g class="chart-grid">${grid}${ticks}<text x="${left}" y="${height-12}">context tokens</text></g><polygon class="series-area" points="${points(first)} ${x(labels.length-1)},${height-bottom} ${x(0)},${height-bottom}"/><polyline class="series first" points="${points(first)}"/><polyline class="series second" points="${points(second)}"/>${first.map((v,i)=>`<circle class="point first-point" cx="${x(i)}" cy="${y(v)}" r="4"><title>${labels[i].toLocaleString()} tokens · ${firstLabel}: ${v} ${unit}</title></circle>`).join("")}${second.map((v,i)=>`<circle class="point second-point" cx="${x(i)}" cy="${y(v)}" r="4"><title>${labels[i].toLocaleString()} tokens · ${secondLabel}: ${v} ${unit}</title></circle>`).join("")}</svg>`;
+}
+
+function renderKvScaling(mode = "latency") {
+  const target = $("kv-chart");
+  const data = DATA.kv_scaling;
+  if (!target || !data) return;
+  const latency = mode === "latency";
+  const first = latency ? data.latency_ms.decode_all : data.kv_memory_mib.fp16;
+  const second = latency ? data.latency_ms.window_read : data.kv_memory_mib.chromofold;
+  const firstLabel = latency ? "decode all" : "fp16 KV";
+  const secondLabel = latency ? "fixed-window read" : "ChromoFold KV";
+  const unit = latency ? "ms" : "MiB";
+  target.innerHTML = chartSvg(data.context_tokens, first, second, firstLabel, secondLabel, unit);
+  $("kv-chart-title").textContent = latency ? "Latency versus context length" : "KV memory versus context length";
+  $("kv-chart-sub").textContent = latency ? `A fixed ${data.window_tokens}-token window decodes only the blocks it reads; decode-all expands the stored context.` : "Both grow with context, but ChromoFold retains the measured lower KV footprint at every sampled length.";
+  $("kv-legend").innerHTML = `<span><i class="legend-line first"></i>${esc(firstLabel)}</span><span><i class="legend-line second"></i>${esc(secondLabel)}</span>`;
+  $("chart-latency")?.setAttribute("aria-pressed", String(latency));
+  $("chart-memory")?.setAttribute("aria-pressed", String(!latency));
+}
+
+function renderKvEvidence() {
+  const data = DATA.kv_scaling;
+  if (!data || !$("kv-chart")) return;
+  $("kv-scope").textContent = `${data.hardware} · ${data.scope}`;
+  $("kv-boundary").textContent = data.boundary;
+  $("kv-kpis").innerHTML = `<article><strong>~${esc(data.headline.window_latency_ms)} ms</strong><span>fixed-window latency across 1K–64K in the prototype sweep</span></article><article><strong>${Number(data.headline.speedup_at_64k).toFixed(0)}×</strong><span>decode-all / window-read at 64K</span></article><article><strong>${esc(data.headline.kv_memory_reduction)}</strong><span>native fused-attention KV memory reduction</span></article>`;
+  const tbody = document.querySelector("#quality-table tbody");
+  if (tbody) tbody.innerHTML = list(data.quality).map((q) => `<tr class="${q.recommended ? "recommended" : ""}"><td>${esc(q.scheme)}${q.recommended ? ' <span class="level">usable point</span>' : ""}</td><td>${q.bits_per_value}</td><td>${q.compression_vs_fp16}×</td><td>${Number(q.attention_mse).toExponential(2)}</td></tr>`).join("");
+  const status = $("native-status");
+  if (status) status.innerHTML = list(data.native_status).map((item) => `<article class="card"><h3>${esc(item.stage)}</h3><strong>${esc(item.result)}</strong><p>${esc(item.correctness)}</p></article>`).join("");
+  renderKvScaling();
+  $("chart-latency")?.addEventListener("click", () => renderKvScaling("latency"));
+  $("chart-memory")?.addEventListener("click", () => renderKvScaling("memory"));
+}
+
+setupNav(); releaseStatus(); renderEvidence(); renderEvidenceLadder(); renderCompatibility(); setupPlanner(); renderProfiles(); renderDownloads(); renderReleaseGates(); renderContribute(); renderKvEvidence();
 ["evidence-level","evidence-search","evidence-filter"].forEach((id) => $(id)?.addEventListener(id === "evidence-search" ? "input" : "change", renderEvidence));
 ["compat-runtime","compat-os","compat-status"].forEach((id) => $(id)?.addEventListener("change", renderCompatibility));
