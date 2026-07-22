@@ -15,7 +15,7 @@ PAGES = (
     "index.html", "technology.html", "evidence.html", "compatibility.html",
     "start.html", "workbench.html", "sessions.html", "releases.html", "contribute.html",
 )
-ASSETS = ("styles.css", "app.js", "workbench.js", "workbench.css", "sessions.js", "sessions.css")
+ASSETS = ("styles.css", "app.js", "performance.js", "workbench.js", "workbench.css", "sessions.js", "sessions.css")
 
 
 def load_object(path: Path) -> dict[str, Any]:
