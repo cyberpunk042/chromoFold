@@ -64,6 +64,33 @@ double bytes_per_token(uint32_t bits, uint32_t kg, uint32_t vg) {
     const double vscales = (double) T * ((HD + vg - 1) / vg);             // per (token, dim-group)
     return (packed + (kscales + vscales) * 4.0) / T;
 }
+
+// Engine-default quantization to SYMBOLS (per-channel K, per-token V) at the given qmax/zero_point.
+void quantize_symbols(const std::vector<float>& K, const std::vector<float>& V, int qmax, int zero_point,
+                      std::vector<uint8_t>& Ksym, std::vector<uint8_t>& Vsym) {
+    Ksym.resize(K.size()); Vsym.resize(V.size());
+    auto q = [&](float x, float sc) { return (uint8_t) (std::max(-qmax - 1, std::min(qmax, (int) std::lrint(x / sc))) + zero_point); };
+    for (uint32_t d = 0; d < HD; ++d) {
+        float m = 0.f;
+        for (uint32_t t = 0; t < T; ++t) m = std::max(m, std::fabs(K[t * HD + d]));
+        const float sc = m == 0.f ? 1.f : m / (float) qmax;
+        for (uint32_t t = 0; t < T; ++t) Ksym[t * HD + d] = q(K[t * HD + d], sc);
+    }
+    for (uint32_t t = 0; t < T; ++t) {
+        float m = 0.f;
+        for (uint32_t d = 0; d < HD; ++d) m = std::max(m, std::fabs(V[t * HD + d]));
+        const float sc = m == 0.f ? 1.f : m / (float) qmax;
+        for (uint32_t d = 0; d < HD; ++d) Vsym[t * HD + d] = q(V[t * HD + d], sc);
+    }
+}
+
+double entropy_bits(const std::vector<uint8_t>& sym, int levels) {
+    std::vector<uint64_t> cnt(levels, 0);
+    for (uint8_t s : sym) cnt[s]++;
+    double H = 0.0;
+    for (uint64_t c : cnt) if (c) { const double p = (double) c / sym.size(); H -= p * std::log2(p); }
+    return H;
+}
 }  // namespace
 
 int main() {
@@ -104,6 +131,21 @@ int main() {
             for (uint32_t i = 0; i < HD; ++i) { const double e = std::fabs(o[i] - ref[i]); sum += e; mx = std::max(mx, e); n++; }
         }
         std::printf("%-46s %6u %10.5f %10.4f %8.1f\n", c.note, c.bits, sum / n, mx, bytes_per_token(c.bits, c.kg, c.vg));
+    }
+
+    // Entropy headroom: the fixed 4/8-bit packing reclaims none of the symbol redundancy. Measure the symbol
+    // entropy (H0) and project entropy-coded bytes/token as a lower bound — the lever group size couldn't touch.
+    std::printf("\nentropy headroom (the lever finer scales can't reach):\n");
+    std::printf("%-6s %8s %8s %10s %12s %9s\n", "bits", "H0(K)", "H0(V)", "fixed B/tok", "H0-coded B/tok", "savings");
+    for (uint32_t bits : {4u, 8u}) {
+        const int qmax = (1 << (bits - 1)) - 1, zp = 1 << (bits - 1), levels = 1 << bits;
+        std::vector<uint8_t> Ksym, Vsym;
+        quantize_symbols(K, V, qmax, zp, Ksym, Vsym);
+        const double Hk = entropy_bits(Ksym, levels), Hv = entropy_bits(Vsym, levels);
+        const double scales = (double) HD + T;  // per-channel K + per-token V
+        const double fixed = (2.0 * T * HD * bits / 8.0 + scales * 4.0) / T;
+        const double coded = (T * HD * (Hk + Hv) / 8.0 + scales * 4.0) / T;
+        std::printf("%-6u %8.3f %8.3f %10.1f %12.1f %8.1f%%\n", bits, Hk, Hv, fixed, coded, 100.0 * (1.0 - coded / fixed));
     }
     return 0;
 }
