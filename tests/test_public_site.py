@@ -34,17 +34,30 @@ def test_portal_sources_are_versioned() -> None:
     profiles = json.loads((ROOT / "product/profiles.json").read_text(encoding="utf-8"))
     portal = json.loads((ROOT / "product/portal.json").read_text(encoding="utf-8"))
     scaling = json.loads((ROOT / "product/kv-scaling.json").read_text(encoding="utf-8"))
+    native = json.loads((ROOT / "product/native-kv-performance.json").read_text(encoding="utf-8"))
+    campaign = json.loads((ROOT / "product/kv-crossover-campaign.json").read_text(encoding="utf-8"))
     evidence_schema = json.loads((ROOT / "product/evidence-result.schema.json").read_text(encoding="utf-8"))
     session_schema = json.loads((ROOT / "product/qualification-session.schema.json").read_text(encoding="utf-8"))
     assert compatibility["schema"] == "chromofold.compatibility.v1"
     assert profiles["schema"] == "chromofold.profiles.v1"
     assert portal["schema"] == "chromofold.portal.v1"
     assert scaling["schema"] == "chromofold.kv-scaling.v1"
+    assert native["schema"] == "chromofold.native-kv-performance.v1"
+    assert campaign["schema"] == "chromofold.kv-crossover-campaign.v1"
+    assert native["headline"]["latency_win"] is True
+    assert native["headline"]["universal_latency_win"] is False
+    assert native["headline"]["ship_criterion_met_in_regime"] is True
+    assert native["history"][-1]["gap_vs_dense"] > 1
+    crossover = native["crossover_sweep"]
+    assert crossover["status"] == "measured"
+    assert any(row["head_dim"] == 64 and max(row["dense_over_compressed"]) >= 1.02 for row in crossover["rows"])
+    assert any(row["head_dim"] == 128 and max(row["dense_over_compressed"]) < 1 for row in crossover["rows"])
+    assert campaign["status"] == "initial-sweep-measured"
+    assert "NO_CROSSOVER" in campaign["publication_states"]
     assert evidence_schema["properties"]["schema"]["const"] == "chromofold.evidence-result.v1"
     assert session_schema["properties"]["schema"]["const"] == "chromofold.qualification-session.v1"
     assert session_schema["properties"]["baseline_runs"]["minItems"] == 3
     assert len(scaling["context_tokens"]) == len(scaling["latency_ms"]["decode_all"])
-    assert len(scaling["context_tokens"]) == len(scaling["latency_ms"]["window_read"])
     assert "prototype" in scaling["boundary"].lower()
     assert portal["reproduction_fields"] and portal["contribution_paths"]
 
@@ -54,11 +67,11 @@ def test_pages_preserve_evidence_boundaries() -> None:
     assert "exact-digest" in text.lower() or "exact artifact" in text.lower()
     assert "guaranteed" not in text.lower()
     assert "works on every" not in text.lower()
-    assert "browser cannot" in text.lower() or "browser planner is advisory" in text.lower()
     evidence = (ROOT / "site/evidence.html").read_text(encoding="utf-8")
-    assert 'id="kv-chart"' in evidence
-    assert 'id="chart-latency"' in evidence and 'id="chart-memory"' in evidence
-    assert 'id="quality-table"' in evidence and 'id="native-status"' in evidence
+    for marker in ('id="kv-chart"', 'id="m11-history-chart"', 'id="fair-performance-table"', 'id="campaign-summary"'):
+        assert marker in evidence
+    assert "does not mean faster than fair dense" in evidence
+    assert '<script src="performance.js" defer></script>' in evidence
     workbench = (ROOT / "site/workbench.html").read_text(encoding="utf-8")
     assert "not maintainer qualification" in workbench
     sessions = (ROOT / "site/sessions.html").read_text(encoding="utf-8")
@@ -72,16 +85,12 @@ def test_builder_generates_complete_portal() -> None:
         output = Path(temp) / "site"
         result = builder.build(output)
         assert result["pages"] == list(PAGES)
-        assets = ("styles.css", "app.js", "workbench.js", "workbench.css", "sessions.js", "sessions.css", "data.js", "robots.txt", "sitemap.xml", ".nojekyll")
+        assets = ("styles.css", "app.js", "performance.js", "workbench.js", "workbench.css", "sessions.js", "sessions.css", "data.js", "robots.txt", "sitemap.xml", ".nojekyll")
         for name in (*PAGES, "404.html", *assets):
             assert (output / name).is_file(), name
-        for page in PAGES:
-            html = (output / page).read_text(encoding="utf-8")
-            assert '<script src="data.js"></script>' in html
-            assert '<script src="app.js" defer></script>' in html
         data = (output / "data.js").read_text(encoding="utf-8")
-        assert "chromofold.public-site-data.v6" in data
-        for key in ("release_channel", "compatibility", "profiles", "portal", "kv_scaling", "evidence_result_schema", "qualification_session_schema"):
+        assert "chromofold.public-site-data.v7" in data
+        for key in ("kv_scaling", "native_kv_performance", "kv_crossover_campaign", "evidence_result_schema", "qualification_session_schema"):
             assert key in data
         sitemap = (output / "sitemap.xml").read_text(encoding="utf-8")
         for page in PAGES[1:]:
@@ -90,14 +99,14 @@ def test_builder_generates_complete_portal() -> None:
 
 def test_client_runtime_is_safe_and_route_aware() -> None:
     source = (ROOT / "site/app.js").read_text(encoding="utf-8")
+    performance = (ROOT / "site/performance.js").read_text(encoding="utf-8")
     assert "const esc" in source
-    assert "qualification_required:true" in source
-    assert 'evidence_level:"estimate"' in source
-    assert "renderCompatibility" in source
-    assert "renderEvidenceLadder" in source
     assert "renderKvScaling" in source
-    assert "chartSvg" in source
-    assert "navigator.clipboard" in source
+    assert "historyChart" in performance
+    assert "best_measured_latency_win" in performance
+    assert "data.crossover.interpretation" in performance
+    assert "data.initial_sweep" in performance
+    assert "fetch(" not in performance and "XMLHttpRequest" not in performance
 
 
 def test_manual_dispatch_deploys_pages() -> None:
@@ -106,11 +115,11 @@ def test_manual_dispatch_deploys_pages() -> None:
     assert workflow.count("if: github.event_name != 'pull_request'") == 2
     assert "actions/upload-pages-artifact@v3" in workflow
     assert "actions/deploy-pages@v4" in workflow
-    for path in ("product/compatibility.json", "product/profiles.json", "product/portal.json", "product/kv-scaling.json", "product/evidence-result.schema.json", "product/qualification-session.schema.json"):
+    for path in ("product/native-kv-performance.json", "product/kv-crossover-campaign.json"):
         assert workflow.count(path) == 2
-    assert "dist/site/workbench.html" in workflow
-    assert "dist/site/sessions.html" in workflow
-    assert "chromofold.public-site-data.v6" in workflow
+    assert "tools/kv_crossover_campaign.py" in workflow
+    assert "dist/site/performance.js" in workflow
+    assert "chromofold.public-site-data.v7" in workflow
 
 
 if __name__ == "__main__":

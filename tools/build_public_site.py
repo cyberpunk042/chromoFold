@@ -15,7 +15,7 @@ PAGES = (
     "index.html", "technology.html", "evidence.html", "compatibility.html",
     "start.html", "workbench.html", "sessions.html", "releases.html", "contribute.html",
 )
-ASSETS = ("styles.css", "app.js", "workbench.js", "workbench.css", "sessions.js", "sessions.css")
+ASSETS = ("styles.css", "app.js", "performance.js", "workbench.js", "workbench.css", "sessions.js", "sessions.css")
 
 
 def load_object(path: Path) -> dict[str, Any]:
@@ -61,7 +61,7 @@ def build(output: Path) -> dict[str, Any]:
 
     claims = load_object(PRODUCT / "public-claims.json")
     payload = {
-        "schema": "chromofold.public-site-data.v6",
+        "schema": "chromofold.public-site-data.v7",
         "claims": claims["claims"],
         "claim_boundary": claims["boundary"],
         "downloads": normalized_downloads(load_object(PRODUCT / "downloads.json")),
@@ -71,6 +71,8 @@ def build(output: Path) -> dict[str, Any]:
         "profiles": load_object(PRODUCT / "profiles.json"),
         "portal": load_object(PRODUCT / "portal.json"),
         "kv_scaling": load_object(PRODUCT / "kv-scaling.json"),
+        "native_kv_performance": load_object(PRODUCT / "native-kv-performance.json"),
+        "kv_crossover_campaign": load_object(PRODUCT / "kv-crossover-campaign.json"),
         "evidence_result_schema": load_object(PRODUCT / "evidence-result.schema.json"),
         "qualification_session_schema": load_object(PRODUCT / "qualification-session.schema.json"),
         "repository": "https://github.com/cyberpunk042/chromoFold",

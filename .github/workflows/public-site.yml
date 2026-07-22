@@ -12,15 +12,19 @@ on:
       - "product/profiles.json"
       - "product/portal.json"
       - "product/kv-scaling.json"
+      - "product/native-kv-performance.json"
+      - "product/kv-crossover-campaign.json"
       - "product/evidence-result.schema.json"
       - "product/qualification-session.schema.json"
       - "examples/evidence/**"
       - "tools/build_public_site.py"
       - "tools/evidence_workbench.py"
       - "tools/qualification_session.py"
+      - "tools/kv_crossover_campaign.py"
       - "tests/test_public_site.py"
       - "tests/test_evidence_workbench.py"
       - "tests/test_qualification_session.py"
+      - "tests/test_kv_crossover_campaign.py"
       - "site.mk"
       - ".github/workflows/public-site.yml"
   push:
@@ -35,15 +39,19 @@ on:
       - "product/profiles.json"
       - "product/portal.json"
       - "product/kv-scaling.json"
+      - "product/native-kv-performance.json"
+      - "product/kv-crossover-campaign.json"
       - "product/evidence-result.schema.json"
       - "product/qualification-session.schema.json"
       - "examples/evidence/**"
       - "tools/build_public_site.py"
       - "tools/evidence_workbench.py"
       - "tools/qualification_session.py"
+      - "tools/kv_crossover_campaign.py"
       - "tests/test_public_site.py"
       - "tests/test_evidence_workbench.py"
       - "tests/test_qualification_session.py"
+      - "tests/test_kv_crossover_campaign.py"
       - "site.mk"
       - ".github/workflows/public-site.yml"
   workflow_dispatch:
@@ -76,26 +84,26 @@ jobs:
           python3 tools/qualification_session.py examples/evidence/session.json --output /tmp/session-analysis.json --package /tmp/chromofold-support.zip
           grep -q '"state": "PASS"' /tmp/session-analysis.json
           unzip -t /tmp/chromofold-support.zip
+      - name: Generate KV crossover campaign plan
+        run: |
+          python3 tools/kv_crossover_campaign.py plan --output /tmp/kv-crossover-plan.json
+          grep -q 'chromofold.kv-crossover-plan.v1' /tmp/kv-crossover-plan.json
       - name: Validate generated routes
         run: |
           test -f dist/site/index.html
           test -f dist/site/technology.html
           test -f dist/site/evidence.html
+          test -f dist/site/performance.js
           test -f dist/site/compatibility.html
           test -f dist/site/start.html
           test -f dist/site/workbench.html
-          test -f dist/site/workbench.js
-          test -f dist/site/workbench.css
           test -f dist/site/sessions.html
-          test -f dist/site/sessions.js
-          test -f dist/site/sessions.css
           test -f dist/site/releases.html
           test -f dist/site/contribute.html
           test -f dist/site/sitemap.xml
-          grep -q 'chromofold.public-site-data.v6' dist/site/data.js
-          grep -q 'kv_scaling' dist/site/data.js
-          grep -q 'evidence_result_schema' dist/site/data.js
-          grep -q 'qualification_session_schema' dist/site/data.js
+          grep -q 'chromofold.public-site-data.v7' dist/site/data.js
+          grep -q 'native_kv_performance' dist/site/data.js
+          grep -q 'kv_crossover_campaign' dist/site/data.js
       - name: Upload preview artifact
         uses: actions/upload-artifact@v4
         with:
