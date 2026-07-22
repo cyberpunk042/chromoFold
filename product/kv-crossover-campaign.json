@@ -1,24 +1,34 @@
 {
   "schema": "chromofold.kv-crossover-campaign.v1",
-  "purpose": "Find or falsify the workload region where compressed paged attention reaches latency parity with an equally optimized dense-f16 kernel.",
-  "status": "planned",
+  "purpose": "Map the workload region where compressed paged attention reaches latency parity with an equally optimized dense-f16 kernel.",
+  "status": "initial-sweep-complete",
   "required_repetitions": 5,
   "maximum_cv_pct": 5.0,
   "dimensions": {
     "context_tokens": [512, 2048, 4096, 16384, 65536],
     "head_dim": [64, 128, 256],
-    "query_count": [1, 32, 256],
+    "query_count": [1, 32, 64, 256],
     "kv_heads": [2, 8, 32],
     "code_bits": [4, 8]
   },
-  "required_metrics": [
-    "compressed_latency_us",
-    "fair_dense_latency_us",
-    "compressed_peak_vram_mib",
-    "dense_peak_vram_mib",
-    "correctness_max_error",
-    "throughput_tokens_s"
-  ],
+  "initial_sweep": {
+    "hardware": "NVIDIA RTX 2080 Ti (sm_75)",
+    "query_count": 64,
+    "code_bits": 4,
+    "results": [
+      {"head_dim":64,"context_tokens":4096,"dense_over_compressed":0.78,"state":"NO_CROSSOVER"},
+      {"head_dim":64,"context_tokens":16384,"dense_over_compressed":1.02,"state":"WIN"},
+      {"head_dim":64,"context_tokens":32768,"dense_over_compressed":1.03,"state":"WIN"},
+      {"head_dim":64,"context_tokens":65536,"dense_over_compressed":1.04,"state":"WIN"},
+      {"head_dim":128,"context_tokens":4096,"dense_over_compressed":0.76,"state":"NO_CROSSOVER"},
+      {"head_dim":128,"context_tokens":16384,"dense_over_compressed":0.83,"state":"NO_CROSSOVER"},
+      {"head_dim":128,"context_tokens":32768,"dense_over_compressed":0.86,"state":"NO_CROSSOVER"},
+      {"head_dim":128,"context_tokens":65536,"dense_over_compressed":0.82,"state":"NO_CROSSOVER"}
+    ],
+    "finding": "A marginal 1.02–1.04× latency win appears at head_dim 64 from about 16K context onward. No crossover appears at head_dim 128 through 64K.",
+    "primary_value": "The decisive value remains 2.67× more context at equal VRAM, not broad latency acceleration."
+  },
+  "required_metrics": ["compressed_latency_us","fair_dense_latency_us","compressed_peak_vram_mib","dense_peak_vram_mib","correctness_max_error","throughput_tokens_s"],
   "parity_rule": "The median compressed latency must be no more than 2% slower than the median fair dense latency, with correctness passing and both coefficients of variation at or below 5%.",
   "win_rule": "The median compressed latency must be at least 2% faster than the median fair dense latency, with lower KV memory, correctness passing, and both coefficients of variation at or below 5%.",
   "fairness": [
@@ -28,5 +38,5 @@
     "Negative and no-crossover results must be retained."
   ],
   "publication_states": ["NO_CROSSOVER", "PARITY", "WIN", "INCOMPLETE"],
-  "boundary": "A campaign result is an engine-level finding on the tested GPU. It does not establish an end-to-end serving win until the runtime uses the compressed KV cache in the live path."
+  "boundary": "The located crossover is an engine-level finding on one GPU and a narrow workload region. It does not establish a universal latency win or an end-to-end serving win until the live runtime uses the compressed KV cache."
 }
