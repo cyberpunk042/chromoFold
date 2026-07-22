@@ -61,7 +61,7 @@ def build(output: Path) -> dict[str, Any]:
 
     claims = load_object(PRODUCT / "public-claims.json")
     payload = {
-        "schema": "chromofold.public-site-data.v3",
+        "schema": "chromofold.public-site-data.v4",
         "claims": claims["claims"],
         "claim_boundary": claims["boundary"],
         "downloads": normalized_downloads(load_object(PRODUCT / "downloads.json")),
@@ -70,6 +70,7 @@ def build(output: Path) -> dict[str, Any]:
         "compatibility": load_object(PRODUCT / "compatibility.json"),
         "profiles": load_object(PRODUCT / "profiles.json"),
         "portal": load_object(PRODUCT / "portal.json"),
+        "visualizations": load_object(PRODUCT / "visualizations.json"),
         "repository": "https://github.com/cyberpunk042/chromoFold",
     }
     (output / "data.js").write_text(
