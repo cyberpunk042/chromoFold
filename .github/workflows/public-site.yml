@@ -8,6 +8,9 @@ on:
       - "product/downloads.json"
       - "product/evidence-registry.json"
       - "product/release-channel.json"
+      - "product/compatibility.json"
+      - "product/profiles.json"
+      - "product/portal.json"
       - "tools/build_public_site.py"
       - "tests/test_public_site.py"
       - "site.mk"
@@ -20,6 +23,9 @@ on:
       - "product/downloads.json"
       - "product/evidence-registry.json"
       - "product/release-channel.json"
+      - "product/compatibility.json"
+      - "product/profiles.json"
+      - "product/portal.json"
       - "tools/build_public_site.py"
       - "tests/test_public_site.py"
       - "site.mk"
@@ -43,12 +49,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Test and build
+      - name: Test and build product portal
         run: make -f site.mk site-all
+      - name: Validate generated routes
+        run: |
+          test -f dist/site/index.html
+          test -f dist/site/technology.html
+          test -f dist/site/evidence.html
+          test -f dist/site/compatibility.html
+          test -f dist/site/start.html
+          test -f dist/site/releases.html
+          test -f dist/site/contribute.html
+          test -f dist/site/sitemap.xml
       - name: Upload preview artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chromofold-public-site-${{ github.sha }}
+          name: chromofold-product-portal-${{ github.sha }}
           path: dist/site
           if-no-files-found: error
       - name: Upload Pages artifact
