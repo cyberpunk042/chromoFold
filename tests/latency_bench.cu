@@ -21,31 +21,39 @@ static void ck(cudaError_t e, const char* m) { if (e != cudaSuccess) { std::fpri
 #define CF_KV_MAX_HEAD_DIM 256
 #endif
 
-// Fair dense baseline: raw f16 K/V, same per-(query_row,query_head) online softmax as the paged kernel.
-__global__ void dense_attention(const __half* K, const __half* V, const float* Q, float* out,
-                                int N, int query_count, int qh, int kvh, int gqa, int hd,
-                                float scale, int query_token_begin) {
-    const int linear = blockIdx.x * blockDim.x + threadIdx.x;
-    if (linear >= query_count * qh) return;
-    const int query_row = linear / qh, query_head = linear % qh, kv_head = query_head / gqa;
-    const int query_token = query_token_begin + query_row;
-    float q[CF_KV_MAX_HEAD_DIM], w[CF_KV_MAX_HEAD_DIM];
-    for (int d = 0; d < hd; ++d) { q[d] = Q[(long)(query_row * qh + query_head) * hd + d]; w[d] = 0.f; }
+// FAIR dense baseline: warp-cooperative f16 K/V, same structure as the compressed warp kernel (one warp per
+// query·head, head_dim strided across lanes, butterfly-shuffle QK reduce, register-resident state). The ONLY
+// difference vs compressed is the read: raw f16 here vs int4-decode there. DPL = head_dim/32.
+template <int DPL>
+__global__ void dense_attention_warp(const __half* K, const __half* V, const float* Q, float* out,
+                                     int N, int query_count, int qh, int kvh, int gqa, float scale, int qtb) {
+    const int warp = (blockIdx.x * blockDim.x + threadIdx.x) >> 5;
+    const int lane = threadIdx.x & 31;
+    if (warp >= query_count * qh) return;
+    const int query_row = warp / qh, query_head = warp % qh, kv_head = query_head / gqa;
+    const int query_token = qtb + query_row, hd = DPL * 32;
+    float q[DPL], w[DPL];
+#pragma unroll
+    for (int i = 0; i < DPL; ++i) { q[i] = Q[(long)(query_row * qh + query_head) * hd + lane + 32 * i]; w[i] = 0.f; }
     float maxi = -1e30f, sum = 0.f; int init = 0;
     for (int t = 0; t <= query_token && t < N; ++t) {
         const __half* kt = K + ((long) t * kvh + kv_head) * hd;
-        float score = 0.f;
-        for (int d = 0; d < hd; ++d) score += q[d] * __half2float(kt[d]);
-        score *= scale;
+        float partial = 0.f;
+#pragma unroll
+        for (int i = 0; i < DPL; ++i) partial += q[i] * __half2float(kt[lane + 32 * i]);
+#pragma unroll
+        for (int o = 16; o > 0; o >>= 1) partial += __shfl_xor_sync(0xffffffffu, partial, o);
+        const float score = partial * scale;
         const __half* vt = V + ((long) t * kvh + kv_head) * hd;
-        if (!init) { maxi = score; sum = 1.f; for (int d = 0; d < hd; ++d) w[d] = __half2float(vt[d]); init = 1; continue; }
-        const float nm = fmaxf(maxi, score);
-        const float a = __expf(maxi - nm), b = __expf(score - nm);
-        sum = sum * a + b;
-        for (int d = 0; d < hd; ++d) w[d] = w[d] * a + __half2float(vt[d]) * b;
-        maxi = nm;
+        const float nm = init ? fmaxf(maxi, score) : score;
+        const float a = init ? __expf(maxi - nm) : 0.f, b = init ? __expf(score - nm) : 1.f;
+        sum = init ? sum * a + b : 1.f;
+#pragma unroll
+        for (int i = 0; i < DPL; ++i) { const float vv = __half2float(vt[lane + 32 * i]); w[i] = init ? w[i] * a + vv * b : vv; }
+        maxi = nm; init = 1;
     }
-    for (int d = 0; d < hd; ++d) out[(long)(query_row * qh + query_head) * hd + d] = w[d] / sum;
+#pragma unroll
+    for (int i = 0; i < DPL; ++i) out[(long)(query_row * qh + query_head) * hd + lane + 32 * i] = w[i] / (sum > 0.f ? sum : 1.f);
 }
 
 static float time_ms(void (*launch)(void*), void* ctx, int iters) {
@@ -62,8 +70,10 @@ static float time_ms(void (*launch)(void*), void* ctx, int iters) {
 struct DenseCtx { const __half *K, *V; const float* Q; float* out; int N, Q_, qh, kvh, gqa, hd, qtb; float scale; };
 static void launch_dense(void* p) {
     DenseCtx* c = (DenseCtx*) p;
-    const int work = c->Q_ * c->qh, tpb = 128;
-    dense_attention<<<(work + tpb - 1) / tpb, tpb>>>(c->K, c->V, c->Q, c->out, c->N, c->Q_, c->qh, c->kvh, c->gqa, c->hd, c->scale, c->qtb);
+    const int work = c->Q_ * c->qh, warps_per_block = 4, threads = warps_per_block * 32;
+    const int blocks = (work + warps_per_block - 1) / warps_per_block;
+    // bench fixes head_dim=64 -> DPL=2 (warp-cooperative, matched to the compressed kernel)
+    dense_attention_warp<2><<<blocks, threads>>>(c->K, c->V, c->Q, c->out, c->N, c->Q_, c->qh, c->kvh, c->gqa, c->scale, c->qtb);
 }
 static void launch_paged(void* p) { cf_kv_paged_attention_async((cf_kv_paged_attention_desc*) p, nullptr); }
 
