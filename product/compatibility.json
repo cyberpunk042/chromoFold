@@ -1,0 +1,33 @@
+{
+  "schema": "chromofold.compatibility.v1",
+  "statuses": ["planned", "experimental", "candidate", "qualified", "independently-reproduced"],
+  "entries": [
+    {
+      "runtime": "llama.cpp",
+      "model_format": "GGUF",
+      "gpu_vendor": "NVIDIA",
+      "operating_system": "Linux",
+      "status": "candidate",
+      "evidence": "RC1 hardware qualification required",
+      "limitations": ["CUDA required", "No silent dense fallback", "Runtime adapter and scenario hooks required"]
+    },
+    {
+      "runtime": "llama.cpp",
+      "model_format": "GGUF",
+      "gpu_vendor": "NVIDIA",
+      "operating_system": "Windows",
+      "status": "experimental",
+      "evidence": "Engine benchmarks exist; product bundle is not qualified",
+      "limitations": ["Qualification workflow currently targets Linux self-hosted runners"]
+    },
+    {
+      "runtime": "vLLM",
+      "model_format": "safetensors",
+      "gpu_vendor": "NVIDIA",
+      "operating_system": "Linux",
+      "status": "planned",
+      "evidence": "No runtime integration",
+      "limitations": ["Do not claim support"]
+    }
+  ]
+}
