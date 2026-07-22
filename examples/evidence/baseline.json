@@ -1,0 +1,20 @@
+{
+  "schema": "chromofold.evidence-result.v1",
+  "role": "baseline",
+  "fingerprint": {
+    "model": "Qwen2.5-0.5B",
+    "runtime": "llama.cpp@example",
+    "hardware": "NVIDIA RTX 2080 Ti",
+    "workload": "context-32768-concurrency-1",
+    "release_digest": null
+  },
+  "metrics": {
+    "throughput_tokens_s": 42.0,
+    "latency_p50_ms": 24.0,
+    "latency_p95_ms": 31.0,
+    "peak_vram_mib": 8210,
+    "capacity_tokens": 32768,
+    "correctness": true
+  },
+  "notes": "Synthetic contract fixture. Not a public benchmark claim."
+}

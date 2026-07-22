@@ -12,8 +12,12 @@ on:
       - "product/profiles.json"
       - "product/portal.json"
       - "product/kv-scaling.json"
+      - "product/evidence-result.schema.json"
+      - "examples/evidence/**"
       - "tools/build_public_site.py"
+      - "tools/evidence_workbench.py"
       - "tests/test_public_site.py"
+      - "tests/test_evidence_workbench.py"
       - "site.mk"
       - ".github/workflows/public-site.yml"
   push:
@@ -28,8 +32,12 @@ on:
       - "product/profiles.json"
       - "product/portal.json"
       - "product/kv-scaling.json"
+      - "product/evidence-result.schema.json"
+      - "examples/evidence/**"
       - "tools/build_public_site.py"
+      - "tools/evidence_workbench.py"
       - "tests/test_public_site.py"
+      - "tests/test_evidence_workbench.py"
       - "site.mk"
       - ".github/workflows/public-site.yml"
   workflow_dispatch:
@@ -53,6 +61,14 @@ jobs:
           python-version: "3.12"
       - name: Test and build product portal
         run: make -f site.mk site-all
+      - name: Exercise portable evidence comparison
+        run: |
+          python3 tools/evidence_workbench.py \
+            examples/evidence/baseline.json \
+            examples/evidence/candidate.json \
+            --output /tmp/evidence-analysis.json \
+            --markdown /tmp/evidence-report.md
+          grep -q '"state": "PASS"' /tmp/evidence-analysis.json
       - name: Validate generated routes
         run: |
           test -f dist/site/index.html
@@ -60,11 +76,15 @@ jobs:
           test -f dist/site/evidence.html
           test -f dist/site/compatibility.html
           test -f dist/site/start.html
+          test -f dist/site/workbench.html
+          test -f dist/site/workbench.js
+          test -f dist/site/workbench.css
           test -f dist/site/releases.html
           test -f dist/site/contribute.html
           test -f dist/site/sitemap.xml
-          grep -q 'chromofold.public-site-data.v4' dist/site/data.js
+          grep -q 'chromofold.public-site-data.v5' dist/site/data.js
           grep -q 'kv_scaling' dist/site/data.js
+          grep -q 'evidence_result_schema' dist/site/data.js
       - name: Upload preview artifact
         uses: actions/upload-artifact@v4
         with:
