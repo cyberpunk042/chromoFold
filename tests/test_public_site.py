@@ -60,9 +60,18 @@ def test_estimator_is_labeled_advisory() -> None:
     assert "hardware qualification" in source
 
 
+def test_manual_dispatch_deploys_pages() -> None:
+    workflow = (ROOT / ".github/workflows/public-site.yml").read_text(encoding="utf-8")
+    assert "workflow_dispatch:" in workflow
+    assert workflow.count("if: github.event_name != 'pull_request'") == 2
+    assert "actions/upload-pages-artifact@v3" in workflow
+    assert "actions/deploy-pages@v4" in workflow
+
+
 if __name__ == "__main__":
     test_public_claims_are_explicitly_bounded()
     test_site_avoids_unqualified_universal_claims()
     test_builder_generates_self_contained_site()
     test_estimator_is_labeled_advisory()
+    test_manual_dispatch_deploys_pages()
     print("ChromoFold public site tests: PASS")
