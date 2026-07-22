@@ -1,0 +1,40 @@
+{
+  "schema": "chromofold.profiles.v1",
+  "profiles": {
+    "safe": {
+      "why": "Minimize behavioral change while proving runtime compatibility and evidence collection.",
+      "risks": ["Small capacity gain", "May not justify decode overhead"],
+      "context_target": 32768,
+      "weights": {"mode": "unchanged"},
+      "kv_cache": {"backend": "chromofold", "compressed_pages": true, "active_tail_tokens": 1024, "block_tokens": 64}
+    },
+    "balanced": {
+      "why": "Trade moderate decode work for lower KV capacity and bandwidth pressure.",
+      "risks": ["Latency may regress on compute-bound workloads", "Requires hardware qualification"],
+      "context_target": 65536,
+      "weights": {"mode": "unchanged"},
+      "kv_cache": {"backend": "chromofold", "compressed_pages": true, "active_tail_tokens": 512, "block_tokens": 64}
+    },
+    "maximum-context": {
+      "why": "Spend additional GPU arithmetic to maximize compressed KV residency.",
+      "risks": ["Higher decode overhead", "Sensitive to random access and GPU architecture"],
+      "context_target": 131072,
+      "weights": {"mode": "unchanged"},
+      "kv_cache": {"backend": "chromofold", "compressed_pages": true, "active_tail_tokens": 256, "block_tokens": 128}
+    },
+    "high-concurrency": {
+      "why": "Reduce per-request KV footprint and preserve more sequences on the same GPU.",
+      "risks": ["Scheduler and allocator behavior dominate at overload", "Must validate tenant isolation"],
+      "context_target": 32768,
+      "weights": {"mode": "unchanged"},
+      "kv_cache": {"backend": "chromofold", "compressed_pages": true, "active_tail_tokens": 256, "block_tokens": 64, "prefix_sharing": true}
+    },
+    "shared-prefix": {
+      "why": "Exploit common system prompts, templates and agent prefixes across requests.",
+      "risks": ["Little benefit when prefixes differ", "Reference ownership must be audited"],
+      "context_target": 65536,
+      "weights": {"mode": "unchanged"},
+      "kv_cache": {"backend": "chromofold", "compressed_pages": true, "active_tail_tokens": 512, "block_tokens": 64, "prefix_sharing": true, "delta_clusters": true}
+    }
+  }
+}
