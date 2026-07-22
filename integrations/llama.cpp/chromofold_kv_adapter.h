@@ -22,6 +22,7 @@ typedef struct cf_llama_kv_options {
     uint32_t head_dim;
     uint32_t page_size;
     uint32_t gqa_group_size;
+    uint32_t kv_bits;   /* 8 -> int8 codec; 0 or 4 -> int4 (default) */
 } cf_llama_kv_options;
 
 typedef struct cf_llama_kv_stats {

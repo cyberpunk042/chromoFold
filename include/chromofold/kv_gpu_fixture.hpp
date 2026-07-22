@@ -38,6 +38,16 @@ EncodedKvPage encode_int4_page(const std::vector<float>& keys,
                                std::uint32_t kv_head,
                                std::uint32_t block_size = 64);
 
+// Same scheme at 8-bit (qmax 127, zero_point 128) — ~18x less attention error than int4 (gpu-quantizer-frontier),
+// at 2x the bits. Kernel/descriptor are bit-width-agnostic; only the codebook width differs.
+EncodedKvPage encode_int8_page(const std::vector<float>& keys,
+                               const std::vector<float>& values,
+                               std::uint32_t token_begin,
+                               std::uint32_t token_count,
+                               std::uint32_t head_dim,
+                               std::uint32_t kv_head,
+                               std::uint32_t block_size = 64);
+
 std::vector<std::uint8_t> decode_symbols(const EncodedStream& stream,
                                          std::uint64_t symbol_count);
 

@@ -46,7 +46,7 @@ struct cf_cb_state {
     // append mode: ingest the live model K/V into the ChromoFold compressed cache (single sequence)
     bool append_on = false, tried = false, disabled = false;
     cf_llama_kv_adapter * adapter = nullptr;
-    uint32_t head_dim = 0, kv_heads = 0, page_size = 32;
+    uint32_t head_dim = 0, kv_heads = 0, page_size = 32, kv_bits = 4;
     static const int MAXL = 128;
     std::vector<float> pend_k[MAXL];
     std::vector<float> pend_v[MAXL];
@@ -146,6 +146,8 @@ extern "C" void * chromofold_kv_map_state_create(void) {
     s->append_on = append_on;
     const char * ps = std::getenv("CHROMOFOLD_PAGE_SIZE");
     if (ps != nullptr && ps[0] != '\0') { int p = std::atoi(ps); if (p > 0) s->page_size = (uint32_t) p; }
+    const char * kb = std::getenv("CHROMOFOLD_KV_BITS");
+    if (kb != nullptr && std::atoi(kb) == 8) s->kv_bits = 8;
     const char * sp = std::getenv("CHROMOFOLD_KV_STATS_PATH");
     if (sp != nullptr && sp[0] != '\0') { s->stats_path = sp; std::remove(sp); }
     const char * rp = std::getenv("CHROMOFOLD_KV_REPLACE");
@@ -209,7 +211,7 @@ extern "C" bool chromofold_kv_cb_eval(struct ggml_tensor * t, bool ask, void * u
                     cf_llama_kv_options o{};
                     o.struct_size = sizeof(o); o.backend = CF_LLAMA_KV_BACKEND_CHROMOFOLD;
                     o.layer_count = cf_cb_state::MAXL; o.kv_head_count = kvh; o.query_head_count = kvh;
-                    o.head_dim = hd; o.page_size = s->page_size; o.gqa_group_size = 1;
+                    o.head_dim = hd; o.page_size = s->page_size; o.gqa_group_size = 1; o.kv_bits = s->kv_bits;
                     s->adapter = cf_llama_kv_create(&o);
                     if (s->adapter == nullptr) s->disabled = true;
                 }

@@ -15,6 +15,7 @@ namespace chromofold {
 enum class KvCodecMode : std::uint32_t {
     fixed_int4_huffman = 0,
     adaptive_huffman = 1,
+    fixed_int8_huffman = 2,
 };
 
 struct KvCacheConfig {

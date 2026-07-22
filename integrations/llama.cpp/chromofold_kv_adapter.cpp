@@ -27,6 +27,8 @@ chromofold::KvCacheConfig to_config(const cf_llama_kv_options& options) {
     config.head_dim = options.head_dim;
     config.page_size = options.page_size;
     config.gqa_group_size = options.gqa_group_size;
+    config.codec = (options.kv_bits == 8) ? chromofold::KvCodecMode::fixed_int8_huffman
+                                          : chromofold::KvCodecMode::fixed_int4_huffman;
     return config;
 }
 

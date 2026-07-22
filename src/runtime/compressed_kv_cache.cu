@@ -94,8 +94,9 @@ void CompressedKvCache::seal_full_pages(void* stream) {
                 const std::size_t count = static_cast<std::size_t>(config_.page_size) * config_.head_dim;
                 std::vector<float> keys(state.active.keys.begin(), state.active.keys.begin() + count);
                 std::vector<float> values(state.active.values.begin(), state.active.values.begin() + count);
-                auto encoded = gpu_fixture::encode_int4_page(keys, values, state.active.token_begin,
-                                                             config_.page_size, config_.head_dim, head, 64);
+                auto encoded = (config_.codec == KvCodecMode::fixed_int8_huffman)
+                    ? gpu_fixture::encode_int8_page(keys, values, state.active.token_begin, config_.page_size, config_.head_dim, head, 64)
+                    : gpu_fixture::encode_int4_page(keys, values, state.active.token_begin, config_.page_size, config_.head_dim, head, 64);
                 auto device_page = cuda_runtime::DeviceKvPage::upload(encoded, stream);
                 state.sealed.push_back(std::move(device_page));
                 state.active.keys.erase(state.active.keys.begin(), state.active.keys.begin() + count);
@@ -113,9 +114,9 @@ void CompressedKvCache::flush(void* stream) {
             HeadState& state = impl_->heads[slot_index(config_, layer, head)];
             const std::uint32_t tokens = static_cast<std::uint32_t>(state.active.keys.size() / config_.head_dim);
             if (tokens == 0) continue;
-            auto encoded = gpu_fixture::encode_int4_page(state.active.keys, state.active.values,
-                                                         state.active.token_begin, tokens,
-                                                         config_.head_dim, head, 64);
+            auto encoded = (config_.codec == KvCodecMode::fixed_int8_huffman)
+                ? gpu_fixture::encode_int8_page(state.active.keys, state.active.values, state.active.token_begin, tokens, config_.head_dim, head, 64)
+                : gpu_fixture::encode_int4_page(state.active.keys, state.active.values, state.active.token_begin, tokens, config_.head_dim, head, 64);
             state.sealed.push_back(cuda_runtime::DeviceKvPage::upload(encoded, stream));
             impl_->sealed_tokens += tokens;
             state.active = {};

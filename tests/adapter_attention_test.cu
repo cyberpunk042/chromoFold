@@ -19,7 +19,7 @@ static void ck(cudaError_t e, const char* m) {
     if (e != cudaSuccess) { std::fprintf(stderr, "%s: %s\n", m, cudaGetErrorString(e)); std::exit(2); }
 }
 
-int main() {
+static int run(uint32_t bits) {
     const uint32_t hd = 64, page_size = 32, N = 70, kvh = 2, qh = 14, gqa = 7;
     std::mt19937 rng(9001);
     std::normal_distribution<float> nd(0.f, 1.f);
@@ -33,7 +33,7 @@ int main() {
     cf_llama_kv_options o{};
     o.struct_size = sizeof(o); o.backend = CF_LLAMA_KV_BACKEND_CHROMOFOLD;
     o.layer_count = 1; o.kv_head_count = kvh; o.query_head_count = qh;
-    o.head_dim = hd; o.page_size = page_size; o.gqa_group_size = gqa;
+    o.head_dim = hd; o.page_size = page_size; o.gqa_group_size = gqa; o.kv_bits = bits;
     cf_llama_kv_adapter* a = cf_llama_kv_create(&o);
     if (a == nullptr) { std::printf("create failed\n"); return 2; }
 
@@ -65,7 +65,8 @@ int main() {
         for (uint32_t tb = 0; tb < sealed; tb += page_size) {
             std::vector<float> pk(K[h].begin() + tb * hd, K[h].begin() + (tb + page_size) * hd);
             std::vector<float> pv(V[h].begin() + tb * hd, V[h].begin() + (tb + page_size) * hd);
-            auto enc = encode_int4_page(pk, pv, tb, page_size, hd, h, 64);
+            auto enc = (bits == 8) ? chromofold::gpu_fixture::encode_int8_page(pk, pv, tb, page_size, hd, h, 64)
+                                   : encode_int4_page(pk, pv, tb, page_size, hd, h, 64);
             refK[h].insert(refK[h].end(), enc.dequantized_k.begin(), enc.dequantized_k.end());
             refV[h].insert(refV[h].end(), enc.dequantized_v.begin(), enc.dequantized_v.end());
         }
@@ -94,9 +95,14 @@ int main() {
         }
     }
     mse /= (qh * hd);
-    std::printf("{\"tokens\":%u,\"kv_heads\":%u,\"query_heads\":%u,\"gqa\":%u,\"max_abs_error\":%g,\"mse\":%g}\n",
-                N, kvh, qh, gqa, maxabs, mse);
+    std::printf("{\"bits\":%u,\"tokens\":%u,\"kv_heads\":%u,\"query_heads\":%u,\"gqa\":%u,\"max_abs_error\":%g,\"mse\":%g}\n",
+                bits, N, kvh, qh, gqa, maxabs, mse);
     cf_llama_kv_destroy(a);
     cudaFree(dQ); cudaFree(dOut);
     return maxabs <= 2e-4f ? 0 : 1;
+}
+
+int main() {
+    // Verify the paged-attention kernel is bit-exact to a dequantized reference at BOTH codec widths.
+    return run(4) | run(8);
 }
