@@ -1,0 +1,32 @@
+{
+  "schema": "chromofold.kv-crossover-campaign.v1",
+  "purpose": "Find or falsify the workload region where compressed paged attention reaches latency parity with an equally optimized dense-f16 kernel.",
+  "status": "planned",
+  "required_repetitions": 5,
+  "maximum_cv_pct": 5.0,
+  "dimensions": {
+    "context_tokens": [512, 2048, 4096, 16384, 65536],
+    "head_dim": [64, 128, 256],
+    "query_count": [1, 32, 256],
+    "kv_heads": [2, 8, 32],
+    "code_bits": [4, 8]
+  },
+  "required_metrics": [
+    "compressed_latency_us",
+    "fair_dense_latency_us",
+    "compressed_peak_vram_mib",
+    "dense_peak_vram_mib",
+    "correctness_max_error",
+    "throughput_tokens_s"
+  ],
+  "parity_rule": "The median compressed latency must be no more than 2% slower than the median fair dense latency, with correctness passing and both coefficients of variation at or below 5%.",
+  "win_rule": "The median compressed latency must be at least 2% faster than the median fair dense latency, with lower KV memory, correctness passing, and both coefficients of variation at or below 5%.",
+  "fairness": [
+    "Dense and compressed kernels must use the same warp decomposition, online-softmax algorithm, query layout, causal window, launch geometry class and timing method.",
+    "Only the storage/read representation may differ: raw f16 for dense and fixed-width compressed decode for ChromoFold.",
+    "Warmup count, measured iterations, clocks and power state must be recorded.",
+    "Negative and no-crossover results must be retained."
+  ],
+  "publication_states": ["NO_CROSSOVER", "PARITY", "WIN", "INCOMPLETE"],
+  "boundary": "A campaign result is an engine-level finding on the tested GPU. It does not establish an end-to-end serving win until the runtime uses the compressed KV cache in the live path."
+}
