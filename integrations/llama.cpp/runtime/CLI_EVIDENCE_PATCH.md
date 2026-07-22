@@ -87,7 +87,29 @@ serving is numerically equal to dense within float rounding. The `paged-kv-seam`
 tests also pass.
 
 So layer 2 is **not** unwritten compressed-attention math — it is the **graph wiring**: threading
-`cf_kv_paged_attention_async` into llama.cpp's `llama_context` / `llama-kv-cache` attention path in place of the
-dense KV read (single-sequence first), and recording the real counters. That wiring's correctness can only be
-signed off by running the e2e (token parity), which needs a machine where `llama-cli` runs to completion (this
-sandbox does not — see "Status" above).
+`cf_kv_paged_attention_async` into llama's attention path in place of the dense KV read (single-sequence first),
+and recording the real counters.
+
+### The interception seam is found, installed, and mapped (verified on the real model)
+
+Rather than patch llama's graph builder, layer 2 hooks the **ggml graph eval callback** (`cparams.cb_eval`) — a
+single, clean, per-node interception point. [`chromofold-kv-callback.{h,cpp}`](chromofold-kv-callback.cpp) is
+installed **env-gated** from `common_context_params_to_llama` (one edit in `common/common.cpp`) when
+`CHROMOFOLD_KV_BACKEND=chromofold`; with `CHROMOFOLD_KV_MAP_PATH` set it maps the attention/KV nodes and otherwise
+never alters the graph (unset env ⇒ llama runs exactly as before). **Verified on `qwen2.5-0.5b-instruct-q2_k` via
+`run_pair_server.py`:** the callback fires and yields the concrete hook spec —
+
+| per-layer tensor | shape | dtype | role |
+|---|---|---|---|
+| `Kcur-L (view)`, `Vcur-L (view)` | `[128, T]` (head_dim 64 × kv_heads 2) | **f32** | **append** into the ChromoFold adapter |
+| `Qcur-L (view) (permuted)` | | f32 | query for paged attention |
+| `kqv_out-L` | `[896, T]` (14 query heads × 64) | f32 | attention output — **replace** target |
+
+Model config: 24 layers, 2 KV heads, 14 query heads (GQA group 7), head_dim 64, **scalar f32** — all inside the
+`initial_support` scope (`patch_manifest.json`). So the two remaining coding increments are now fully specified and
+verifiable here:
+1. **Append** — on `Kcur-L/Vcur-L (view)` (`ask==false`), `ggml_backend_tensor_get` the f32 rows and
+   `cf_llama_kv_append(...)` into the adapter → real compressed pages + real compressed-vs-dense KV bytes in the
+   evidence (the memory win, on a real model).
+2. **Replace** — on `kqv_out-L`, run `cf_kv_paged_attention_async(Qcur, pages)` and overwrite the output buffer;
+   check token parity via `run_pair_server.py --parallel 1` → this is what flips `--require-claim` to a real pass.
