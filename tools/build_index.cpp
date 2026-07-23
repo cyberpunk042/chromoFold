@@ -341,6 +341,7 @@ int main(int argc, char **argv) {
   int vocab = 64, nq = 100000, nr = 100000;
   int npat = 512, plen = 4, sa_sample = 16;
   std::string fm_out;
+  std::string dump_tokens;   // optional: write the raw generated token stream (int32) for downstream demos
   uint64_t seed = 0;
   for (int i = 2; i + 1 < argc; i += 2) {
     std::string k = argv[i];
@@ -350,6 +351,7 @@ int main(int argc, char **argv) {
     else if (k == "--rank") nr = std::stoi(argv[i + 1]);
     else if (k == "--seed") seed = std::stoull(argv[i + 1]);
     else if (k == "--fm") fm_out = argv[i + 1];
+    else if (k == "--dump-tokens") dump_tokens = argv[i + 1];
     else if (k == "--patterns") npat = std::stoi(argv[i + 1]);
     else if (k == "--plen") plen = std::stoi(argv[i + 1]);
     else if (k == "--sa-sample") sa_sample = std::stoi(argv[i + 1]);
@@ -358,6 +360,11 @@ int main(int argc, char **argv) {
   auto t0 = std::chrono::steady_clock::now();
 
   std::vector<int64_t> seq = markov_stream(n, vocab, seed);
+  if (!dump_tokens.empty()) {  // raw corpus (int32) for the spec-draft / searchable-workload demos
+    std::vector<int32_t> toks(seq.begin(), seq.end());
+    FILE *tf = std::fopen(dump_tokens.c_str(), "wb");
+    if (tf) { int64_t hn = n; std::fwrite(&hn, 8, 1, tf); std::fwrite(toks.data(), 4, toks.size(), tf); std::fclose(tf); }
+  }
   // BWT of s = (seq+1) ++ [0]: index the sentinel'd stream, like the FM-index.
   std::vector<int> s(n + 1);
   for (int64_t i = 0; i < n; ++i) s[i] = (int)seq[i] + 1;
