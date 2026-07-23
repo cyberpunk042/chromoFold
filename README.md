@@ -156,6 +156,7 @@ Start at the top and go as deep as you like:
 | See every result explained, with caveats | [`docs/RESULTS.md`](docs/RESULTS.md) |
 | See the guiding principles (the "rules") | [`specs/00-constitution.md`](specs/00-constitution.md) |
 | See the milestone-by-milestone log + numbers | [`specs/03-roadmap.md`](specs/03-roadmap.md) |
+| See the strategic direction (where it competes, where it shouldn't) | [`docs/SEARCHABLE_WORKLOADS.md`](docs/SEARCHABLE_WORKLOADS.md) + visual memos in [`docs/ARTIFACTS.md`](docs/ARTIFACTS.md) |
 | Build / current status / gotchas | [`CLAUDE.md`](CLAUDE.md) |
 | Understand the runtime / packaging / release-qualification layers | [`docs/INTEGRATION.md`](docs/INTEGRATION.md) |
 | Use it as a C library | [`packaging/README.md`](packaging/README.md) |

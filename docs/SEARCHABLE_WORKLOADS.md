@@ -1,5 +1,8 @@
 # Where ChromoFold is unique: search-while-compressed (workload fit)
 
+> Companion memo (visual): **[ChromoFold and the O(n) wall](https://claude.ai/code/artifact/9137a101-4076-4afa-a822-ae71ce1c69f2)** —
+> the strategic framing of this doc (coefficient vs. exponent; substrate not algorithm). Indexed in [`ARTIFACTS.md`](ARTIFACTS.md).
+
 Follows the KV finding ([`../integrations/llama.cpp/runtime/KV_BACKEND_FINDINGS.md`](../integrations/llama.cpp/runtime/KV_BACKEND_FINDINGS.md)):
 llama.cpp already ships quantized + fused-decode KV, so KV *compression* is commoditized. ChromoFold's genuinely
 non-redundant capability is its **searchable succinct index** (M1–M7, all bit-exact). This doc maps that capability
