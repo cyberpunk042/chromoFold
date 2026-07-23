@@ -12,7 +12,7 @@ BUILD = build
 REFS  = benchmarks/refs
 VOCABS = 4 16 256 32768 65536 131072
 
-.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet rans fm-search fused-matmul kv-attention sparse-gather delta suffix-array build-index test test-quick package conformance m16-contract bench-smoke
+.PHONY: all clean bench frontier reference experiment-a fused rank rrr rrr-wavelet rans fm-search fused-matmul kv-attention sparse-gather delta suffix-array build-index test test-quick package conformance m16-contract bench-smoke spec-draft
 
 all: $(BUILD)/gpu_access $(BUILD)/frontier $(BUILD)/fused_embedding $(BUILD)/rank_bench $(BUILD)/rrr_bench $(BUILD)/rrr_wavelet $(BUILD)/rans_bench $(BUILD)/fm_search $(BUILD)/fused_matmul $(BUILD)/fused_kv_attention $(BUILD)/sparse_gather $(BUILD)/delta_bench $(BUILD)/suffix_array
 
@@ -47,6 +47,10 @@ $(BUILD)/rans_bench: benchmarks/rans_bench.cu src/cuda/rans.cu include/chromofol
 $(BUILD)/fm_search: benchmarks/fm_search.cu src/cuda/fm_search.cu include/chromofold/detail/fm_search_device.cuh include/chromofold/detail/rrr_wavelet_device.cuh include/chromofold/detail/access_device.cuh
 	@mkdir -p $(BUILD)
 	$(NVCC) $(NVFLAGS) benchmarks/fm_search.cu src/cuda/fm_search.cu -o $@
+
+$(BUILD)/spec_draft_demo: tests/spec_draft_demo.cu src/cuda/fm_search.cu include/chromofold/detail/fm_search_device.cuh
+	@mkdir -p $(BUILD)
+	$(NVCC) $(NVFLAGS) tests/spec_draft_demo.cu src/cuda/fm_search.cu -o $@
 
 $(BUILD)/fused_matmul: benchmarks/fused_matmul.cu src/cuda/fused_matmul.cu include/chromofold/chromofold.h include/chromofold/detail/block_huffman_device.cuh
 	@mkdir -p $(BUILD)
@@ -131,6 +135,12 @@ fm-search: $(BUILD)/fm_search
 # M5: GPU suffix-array build verified bit-identical to the CPU SA + speedup (no Python)
 suffix-array: $(BUILD)/suffix_array
 	$(BUILD)/suffix_array
+
+# Searchable-thesis demo (docs/SEARCHABLE_WORKLOADS.md): the verified FM-index as a COMPRESSED, GPU-resident
+# n-gram / prompt-lookup speculative-draft oracle vs an uncompressed hash n-gram table (hit-rate + memory). No Warp.
+spec-draft: $(BUILD)/spec_draft_demo $(BUILD)/build_index
+	$(BUILD)/build_index $(BUILD)/spec.cfrw --n 200000 --vocab 64 --seed 7 --sa-sample 8 --fm $(BUILD)/spec.cffm --dump-tokens $(BUILD)/spec.toks >/dev/null
+	@for L in 2 4 8; do $(BUILD)/spec_draft_demo $(BUILD)/spec.toks $(BUILD)/spec.cffm $$L; echo; done
 
 build-index: $(BUILD)/build_index $(BUILD)/rrr_wavelet $(BUILD)/fm_search
 	@mkdir -p $(REFS)

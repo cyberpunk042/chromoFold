@@ -45,9 +45,26 @@ searchable token index — their search structures are uncompressed.
   **scale** (large draft/prefix corpora kept GPU-resident) — where "compressed + searchable + on-GPU" is
   categorically different from an uncompressed hash/trie, not just incrementally cheaper.
 
-## Bounded next demonstration (proposed)
-A **compressed n-gram speculative-draft lookup** micro-benchmark: build the FM-index over a realistic (order-k
-Markov / real-text) token corpus; for many query suffixes, FM backward-search → `locate` → next-token draft;
-compare **draft hit-rate** (vs ground-truth next token) and **memory** against an uncompressed hash-map n-gram
-baseline. Success = same/again-better hit rate at a fraction of the memory, GPU-resident. Reuses the verified
-`cf_fm_count/ranges/locate` kernels — the primitive is done; this frames it as the workload.
+## Demonstration — built and measured (`make spec-draft`, `tests/spec_draft_demo.cu`)
+The compressed n-gram speculative-draft lookup is now a running demo: build the FM-index over a 200k-token corpus,
+and for 4000 query suffixes do FM backward-search → `locate` → argmax next-token draft, vs an **uncompressed hash
+n-gram** baseline. Both predict from *prior* occurrences only (the query's own occurrence excluded — the honest
+fair comparison). RTX 2080 Ti, vocab 64:
+
+| context L | draft hit-rate (FM == hash) | FM-index (ONE index, ANY L) | hash order-L: min .. real-histogram |
+|---|---|---|---|
+| 2 | 0.601 | 215 KB | 12 KB .. 1.0 MB |
+| 4 | 0.578 | 215 KB | 185 KB .. 9.5 MB |
+| 8 | 0.529 | 215 KB | 1.1 MB .. 33 MB |
+
+- **Correctness:** FM occurrence sets == brute-force corpus scan on every gated query; **FM predictions bit-match
+  the hash baseline** (identical hit-rates) — the FM-index implements the n-gram lookup exactly.
+- **The win:** *one* 215 KB compressed GPU-resident index serves **every** order L (and `locate` + arbitrary-length
+  patterns); a hash table is fixed-order and grows with L — at L=8 the FM index is **5× smaller than even a
+  charitable argmax-only hash** and **150× smaller than the real histogram map**.
+- **Honest caveat (kept):** for a single *small* fixed order with an argmax-only packed encoding, a hash is tinier
+  (L=2: 12 KB vs 215 KB). ChromoFold's edge is generality (any L, one index), the richer `locate`/count capability,
+  and GPU-residency at scale — not raw size at a small fixed order.
+
+This is the honest shape of the searchable thesis: same accuracy, one compressed index for any pattern length,
+GPU-resident — a capability profile llama's quantized KV (or a per-order hash) does not offer.
