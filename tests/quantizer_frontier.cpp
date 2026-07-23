@@ -84,6 +84,21 @@ void quantize_symbols(const std::vector<float>& K, const std::vector<float>& V, 
     }
 }
 
+// llama q4_0-style: symmetric int4 over blocks of 32 CONSECUTIVE elements (along the per-token dim), same scheme
+// for K and V. Contrast with ChromoFold KIVI (per-channel K over tokens / per-token V over dims). Both are 4-bit;
+// the question is whether KIVI's KV-aware grouping is measurably more accurate than q4_0's uniform blocks.
+void quantize_q40_style(const std::vector<float>& X, int qmax, std::vector<float>& Xq) {
+    Xq.resize(X.size());
+    for (uint32_t t = 0; t < T; ++t)
+        for (uint32_t d0 = 0; d0 < HD; d0 += 32) {
+            const uint32_t d1 = std::min(HD, d0 + 32);
+            float m = 0.f;
+            for (uint32_t d = d0; d < d1; ++d) m = std::max(m, std::fabs(X[t * HD + d]));
+            const float sc = m == 0.f ? 1.f : m / (float) qmax;
+            for (uint32_t d = d0; d < d1; ++d) Xq[t * HD + d] = dequant(X[t * HD + d], sc, qmax);
+        }
+}
+
 double entropy_bits(const std::vector<uint8_t>& sym, int levels) {
     std::vector<uint64_t> cnt(levels, 0);
     for (uint8_t s : sym) cnt[s]++;
@@ -147,5 +162,25 @@ int main() {
         const double coded = (T * HD * (Hk + Hv) / 8.0 + scales * 4.0) / T;
         std::printf("%-6u %8.3f %8.3f %10.1f %12.1f %8.1f%%\n", bits, Hk, Hv, fixed, coded, 100.0 * (1.0 - coded / fixed));
     }
+
+    // Head-to-head vs llama's shipped q4_0 KV: is ChromoFold's KIVI grouping actually more accurate at 4-bit?
+    std::printf("\nChromoFold KIVI int4 vs llama q4_0-style int4 (attention error vs full precision):\n");
+    std::vector<float> Kk, Vk, Kq, Vq;
+    quantize_kv(K, V, 7, T, HD, Kk, Vk);        // KIVI: per-channel K, per-token V
+    quantize_q40_style(K, 7, Kq);               // q4_0: per-32-block, same for K and V
+    quantize_q40_style(V, 7, Vq);
+    double kivi_sum = 0, q40_sum = 0; uint64_t nn = 0;
+    for (uint32_t q = 0; q < NQ; ++q) {
+        std::vector<float> Q(HD);
+        for (auto& x : Q) x = nd(rng);
+        float ref[HD], ok[HD], oq[HD];
+        attend(Q.data(), K, V, ref);
+        attend(Q.data(), Kk, Vk, ok);
+        attend(Q.data(), Kq, Vq, oq);
+        for (uint32_t i = 0; i < HD; ++i) { kivi_sum += std::fabs(ok[i] - ref[i]); q40_sum += std::fabs(oq[i] - ref[i]); nn++; }
+    }
+    std::printf("  KIVI (per-channel K / per-token V) : mean %.5f\n", kivi_sum / nn);
+    std::printf("  q4_0-style (per-32-block, uniform) : mean %.5f\n", q40_sum / nn);
+    std::printf("  -> KIVI is %.2fx %s\n", q40_sum / kivi_sum, q40_sum > kivi_sum ? "more accurate" : "LESS accurate");
     return 0;
 }

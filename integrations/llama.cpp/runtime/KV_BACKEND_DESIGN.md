@@ -1,5 +1,12 @@
 # End-to-end ChromoFold KV backend — design & phased plan
 
+> ⚠️ **Read [`KV_BACKEND_FINDINGS.md`](KV_BACKEND_FINDINGS.md) first.** Scoping this backend surfaced that
+> **llama.cpp already ships quantized KV (`-ctk q4_0`) + fused quantized flash attention** — i.e. the VRAM +
+> decode-in-consumer thesis this backend targets. Against llama's q4_0 the storage/latency gap is ≈1×; ChromoFold's
+> only measured KV edge is ~1.19× quantizer accuracy (KIVI vs per-block) and, more fundamentally, **searchability**
+> (which KV-decode doesn't use). This design remains valid *if* the effort is justified on those differentiators —
+> not on a VRAM win that llama already delivers. Below is the seam/plan; the recommendation is to redirect.
+
 **Goal (P10 ship criterion).** Make `llama-server` *serve attention from the compressed KV cache instead of
 allocating a dense one*, so the engine-level **2.67× capacity** (`gpu-capacity`) becomes a real **end-to-end VRAM
 win** in a running server. The `cb_eval` shadow seam (append/replace, verified — see `CLI_EVIDENCE_PATCH.md`) proved
