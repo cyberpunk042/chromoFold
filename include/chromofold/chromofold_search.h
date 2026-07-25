@@ -73,6 +73,30 @@ cf_status cf_fm_ranges_async(cf_fm_view v, const int32_t *pat, const int32_t *ps
 /* locate: for each suffix-array row index `r_in[t]` (from a [lo, hi) range), write its text position to out[t]. */
 cf_status cf_fm_locate_async(cf_fm_view v, const int32_t *r_in, int32_t *out, size_t nocc, void *stream);
 
+/* --- FM-index host-pointer convenience layer (device marshalling hidden in the engine) ---
+ * For a caller that has a `.cffm` blob + host query arrays and does NOT want to do CUDA device marshalling
+ * itself (e.g. a Rust `-sys` FFI that would otherwise need cudart). `cf_fm_host_load` uploads the index to the
+ * device ONCE (build != query, P9); each query uploads the small pattern arrays, runs the device-native kernels
+ * above, and downloads the results. The device-native hot path is unchanged; this trades a host copy of the
+ * (small) query + result for the caller not needing cudart. Every entry point returns CF_ERR_INVALID_ARGUMENT
+ * on a NULL required pointer BEFORE any CUDA call (the null_arg_contract). */
+typedef struct cf_fm_host_index cf_fm_host_index;
+
+/* Build a device-resident FM-index from a `.cffm` container blob (host bytes). On CF_OK, `*out` owns device
+ * memory until `cf_fm_host_free`. */
+cf_status cf_fm_host_load(const uint8_t *cffm, size_t nbytes, cf_fm_host_index **out);
+/* count: occurrences of each of `npat` patterns (flattened `pat`, per-pattern `pstart`/`plen`), host arrays;
+ * `counts_out` is host memory of length `npat`. */
+cf_status cf_fm_host_count(const cf_fm_host_index *ix, const int32_t *pat, const int32_t *pstart,
+                           const int32_t *plen, uint32_t npat, uint32_t *counts_out);
+/* ranges: suffix-array [lo, hi) interval per pattern (host in/out, each of length `npat`). */
+cf_status cf_fm_host_ranges(const cf_fm_host_index *ix, const int32_t *pat, const int32_t *pstart,
+                            const int32_t *plen, uint32_t npat, int32_t *lo_out, int32_t *hi_out);
+/* locate: text position of each of `nocc` suffix-array row indices in `rows` (host in/out). */
+cf_status cf_fm_host_locate(const cf_fm_host_index *ix, const int32_t *rows, uint32_t nocc, int32_t *pos_out);
+/* release the device-resident index. */
+void cf_fm_host_free(cf_fm_host_index *ix);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

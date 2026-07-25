@@ -34,11 +34,24 @@ model is derived** from `count`/`ranges`/`locate`:
   reference cross-check (~4000 assertions).
 - Both derive from the same FM primitive, so they agree — chromoFold's demo is a natural shared reference/golden.
 
-## The one open gap — sovereign-side, not the engine
-sovereign-os's **linked** (C++ engine) backend still returns `NotImplemented` for `count`/`ranges`/`locate`:
-host→device marshalling (SDD-400 "step 7") isn't wired. The working backend there today is **provenance-B (CPU
-Rust)**. The chromoFold `.so` is ready and verified above — the remaining work is the **sovereign FFI marshalling**,
-not the engine.
+## The step-7 gap — now unblocked from the engine side (2026-07-23)
+sovereign-os's **linked** backend returned `NotImplemented` for `count`/`ranges`/`locate` because the host→device
+marshalling (SDD-400 "step 7") wasn't wired, and the `-sys` crate exposes only the **device-native** async API
+(which needs cudart + `cudaMalloc`/`Memcpy` on the caller). Rather than push that unsafe CUDA marshalling into the
+Rust FFI, the engine now offers a **host-pointer FM-search layer** that hides it:
+
+- **`cf_fm_host_load` / `cf_fm_host_count` / `cf_fm_host_ranges` / `cf_fm_host_locate` / `cf_fm_host_free`**
+  ([`chromofold_search.h`](../include/chromofold/chromofold_search.h)) — build a device-resident index from a
+  `.cffm` blob once (P9), then query with plain host arrays. All device marshalling is inside the (tested) engine.
+- **Verified through the `.so` by a PURE-C caller** (no CUDA in the source — exactly a Rust `-sys`'s position):
+  `make -C packaging functional-host` → `cf_fm_host_count` **bit-identical to golden** over `fixtures/tiny.cffm`
+  (528 patterns), null-arg contract holds. See [`packaging/functional_host.c`](../packaging/functional_host.c);
+  the capability is registered as `fm_host_search` in `chromofold_capability.json`.
+
+So sovereign's step-7 collapses to: read the `.cffm` bytes → `cf_fm_host_load` → `cf_fm_host_count`/`locate` with
+Rust slices → done, **no cudart in the FFI crate.** The remaining work is a thin sovereign-side binding of these
+five functions (the `-sys` crate already links the `.so`); the marshalling itself no longer needs to be written or
+tested there. The device-native async API stays for a future zero-copy path.
 
 ## Honest bottom line
 Search-while-compressed is the through-line of everything this cycle produced (the O(n) memo, the spec-draft demo)

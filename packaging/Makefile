@@ -15,7 +15,7 @@ INC  := -I$(ROOT)/include
 NVFLAGS := -O3 -std=c++17 -arch=$(ARCH) $(INC) --expt-relaxed-constexpr -Xcompiler -fPIC
 
 # query-side translation units (the extern "C" cf_* entry points). Build-side / in-progress files excluded.
-SRC := access.cu rank.cu rrr.cu rrr_wavelet.cu fm_search.cu fused_embedding.cu fused_kv_attention.cu fused_matmul.cu
+SRC := access.cu rank.cu rrr.cu rrr_wavelet.cu fm_search.cu fm_search_host.cu fused_embedding.cu fused_kv_attention.cu fused_matmul.cu
 CU  := $(addprefix $(ROOT)/src/cuda/,$(SRC))
 BUILD := build
 
@@ -52,6 +52,14 @@ functional: $(BUILD)/libchromofold.so functional.cu fixtures/tiny.cffm
 	$(NVCC) -O3 -std=c++17 -arch=$(ARCH) $(INC) functional.cu -L$(BUILD) -lchromofold \
 	  -o $(BUILD)/functional -Xlinker -rpath -Xlinker $(BUILD) -Xlinker -rpath -Xlinker $(CUDA_LIB)
 	$(BUILD)/functional fixtures/tiny.cffm
+
+# GPU FUNCTIONAL run of the HOST-pointer convenience API (the sovereign step-7 unblock). Deliberately a PURE C
+# caller (no CUDA in the source, exactly like a Rust `-sys` FFI): .cffm bytes -> load -> count with host arrays,
+# verified vs the fixture's golden. Links libchromofold + cudart; the source itself never touches CUDA.
+functional-host: $(BUILD)/libchromofold.so functional_host.c fixtures/tiny.cffm
+	$(CC) -std=c11 $(INC) functional_host.c -L$(BUILD) -lchromofold -L$(CUDA_LIB) -lcudart \
+	  -Wl,-rpath,$(BUILD) -Wl,-rpath,$(CUDA_LIB) -o $(BUILD)/functional_host
+	$(BUILD)/functional_host fixtures/tiny.cffm
 
 clean:
 	rm -rf $(BUILD)

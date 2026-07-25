@@ -37,7 +37,8 @@
     {"id": "rrrw_rank", "header": "chromofold_search.h", "fn": "cf_rrrw_rank_async", "view": "cf_rrrw_view", "desc": "entropy-sized RRR self-index rank"},
     {"id": "fm_count", "header": "chromofold_search.h", "fn": "cf_fm_count_async", "view": "cf_fm_view", "desc": "FM-index backward-search count in the compressed domain — the net-new capability with NO analogue in a plain KV/quant stack", "sovereign_os_first": true},
     {"id": "fm_ranges", "header": "chromofold_search.h", "fn": "cf_fm_ranges_async", "view": "cf_fm_view", "desc": "FM-index suffix-array [lo,hi) ranges per pattern"},
-    {"id": "fm_locate", "header": "chromofold_search.h", "fn": "cf_fm_locate_async", "view": "cf_fm_view", "desc": "FM-index locate (text positions of occurrences)"}
+    {"id": "fm_locate", "header": "chromofold_search.h", "fn": "cf_fm_locate_async", "view": "cf_fm_view", "desc": "FM-index locate (text positions of occurrences)"},
+    {"id": "fm_host_search", "header": "chromofold_search.h", "fn": "cf_fm_host_load|cf_fm_host_count|cf_fm_host_ranges|cf_fm_host_locate|cf_fm_host_free", "view": "cf_fm_host_index", "desc": "HOST-pointer FM-index search: build a device-resident index from a .cffm blob once, then count/ranges/locate with plain host arrays. Device marshalling hidden in the engine so a caller (e.g. a Rust -sys FFI) needs no cudart. Verified through the .so by a pure-C caller (packaging/functional_host.c, make -C packaging functional-host).", "derived_marshalling": true, "sovereign_os_first": true}
   ],
   "reference_fixtures": [
     {"ext": ".cfwv", "magic": "CFWV", "version": 3, "fixture": "packaging/fixtures/tiny.cfwv", "desc": "frozen packed-wavelet index + golden access output (Warp reference vector)"},
