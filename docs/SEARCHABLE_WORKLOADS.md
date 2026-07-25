@@ -2,6 +2,10 @@
 
 > Companion memo (visual): **[ChromoFold and the O(n) wall](https://claude.ai/code/artifact/9137a101-4076-4afa-a822-ae71ce1c69f2)** —
 > the strategic framing of this doc (coefficient vs. exponent; substrate not algorithm). Indexed in [`ARTIFACTS.md`](ARTIFACTS.md).
+>
+> Downstream, verified: **[SOVEREIGN_SEARCH_INTEGRATION.md](SOVEREIGN_SEARCH_INTEGRATION.md)** — sovereign-os
+> committed to bind this search lane *first* (SDD-400 Lane A); the ABI matches and `libchromofold.so` serves
+> `cf_fm_count`/`locate` bit-identically through the shared library. The search direction is the real integration.
 
 Follows the KV finding ([`../integrations/llama.cpp/runtime/KV_BACKEND_FINDINGS.md`](../integrations/llama.cpp/runtime/KV_BACKEND_FINDINGS.md)):
 llama.cpp already ships quantized + fused-decode KV, so KV *compression* is commoditized. ChromoFold's genuinely
