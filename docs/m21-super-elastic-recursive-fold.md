@@ -1,5 +1,7 @@
 # M21 — Super-elastic fold: stacked residual layers as an elastic accuracy dial
 
+> Companion visual: **[.cfold vs .secfold spec sheet](https://claude.ai/code/artifact/1bacb7ef-4151-4262-9099-497fa4dbc8b2)** — this scheme (`.secfold`) beside the base `.cfold` fold it extends, with the measured error-vs-depth curve. Indexed in [`ARTIFACTS.md`](ARTIFACTS.md).
+
 > **Status: DESIGN, prototype-backed.** No native kernels yet, but the transform is **implemented +
 > measured** in the Warp sibling (`warp_compress/super_elastic.py` + `bench_super_elastic.py`), so the
 > numbers below are real, not asserted (P7). Extends **M20** (grouped delta superposition).
@@ -102,4 +104,8 @@ with ``L`` — the explicit compute-for-accuracy trade (P1). No dense member eve
   `bench_super_elastic.py`, `tests/test_super_elastic.py`; the M20 substrate it extends lives in
   `grouped_delta.py` (`quant_factors`) + `bench_grouped_delta_lora.py`.
 - **Downstream consumer:** `sovereign-os` SDD-401/402 — a multi-layer variant of the weight-fold C ABI
+  — **reconciled 2026-07-23 (P7): SDD-401/402 are not yet written.** sovereign-os's only committed ChromoFold
+  binding today is **SDD-400** (`chromofold-compressed-domain-integration`), whose confirmed first lane is
+  **FM-index compressed-domain search** (Lane A, opt-in / off by default); the weight-fold is an unbuilt later
+  lane. So this consumer is aspirational — the pipe that would eat a `.secfold` does not exist on either side yet.
   (an `L`-layer `cf_grouped_matmul_async`) would extend that export contract once M21 proves out on device.

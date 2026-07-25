@@ -19,6 +19,19 @@ artifact, republish to the **same URL** (don't mint a new link) and leave the ro
 
 ## Index
 
+### .cfold vs .secfold — weight-fold spec sheet · 2026-07-23
+The two tensor-folding schemes side by side: `.cfold` grouped-delta superposition (M20 — group similar tensors
+against a root or computed-centroid reference, one rank-`r` factored atom) vs `.secfold` super-elastic fold (M21 —
+restack the residual `L` times, the elastic accuracy dial). Signature visual: the measured error-vs-depth curve
+(super-elastic 0.512 → bit-exact vs single-fold plateau at 0.239). Honest status foregrounded: both design-stage,
+`.secfold` prototype-measured, and the named consumer (sovereign-os SDD-401/402) does not exist yet.
+- **Artifact:** https://claude.ai/code/artifact/1bacb7ef-4151-4262-9099-497fa4dbc8b2
+- **Draws from:** [`m20-grouped-delta-superposition.md`](m20-grouped-delta-superposition.md),
+  [`m21-super-elastic-recursive-fold.md`](m21-super-elastic-recursive-fold.md); reconciled against
+  `../../sovereign-os/docs/sdd/400-chromofold-compressed-domain-integration.md`
+- **Receipts:** M21 Warp-prototype (seed 20260725, rank-4 group) — error L1 0.512 → L6 0.000 (bit-exact); lossless
+  L=3 stack 1.45× vs independent; matched-rank wash (the reported negative).
+
 ### ChromoFold and the O(n) wall — strategic positioning memo · 2026-07-23
 How the engine relates to the transformer scaling problem: the two moves against an O(n²) curve (shrink the
 coefficient vs. bend the exponent), why KV compression is a commoditized constant factor, and the honest
