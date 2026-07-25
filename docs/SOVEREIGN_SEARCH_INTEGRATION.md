@@ -63,10 +63,17 @@ The sovereign side is now bound and the linked path **verified on a GPU**, not j
   invariant) — **PASS.**
 
 So the full cross-repo path is proven: sovereign Rust (safe `HostFmIndex`) → `-sys` FFI → `libchromofold.so` → GPU
-FM-search → correct results. SDD-400 Lane A (FM-index-search-first) is demonstrably wired and correct; the only
-open item is the operator's call on whether to route the `sovereign-chromofold` search surface through it (it stays
-opt-in, off by default). Reproduce: `make -C packaging functional-host` (engine side) + the `cargo run … --example
-host_fm_smoke` command in that file's header (linked side).
+FM-search → correct results. SDD-400 Lane A (FM-index-search-first) is demonstrably wired and correct. Reproduce:
+`make -C packaging functional-host` (engine side) + the `cargo run … --example host_fm_smoke` command in that
+file's header (linked side).
+
+**The surface is now on the *safe* crate too** — `sovereign-chromofold` (the unsafe-forbidding crate the rest of
+the workspace depends on) exposes `HostFmSearch` (`count`/`ranges`/`locate` over a `.cffm` blob), delegating to the
+`-sys` `HostFmIndex`; opt-in via its `linked` feature, honest-degrading to `HostSearchError::Unavailable` otherwise.
+Its `examples/host_search_smoke.rs` ran the **safe** surface end-to-end on the same GPU (invariant `n=8193` holds).
+So provenance-A is no longer `-sys`-only: it sits beside the CPU-native `FmIndex` (provenance-B) as a peer backend,
+both index-scoped, both agreeing with the same oracle. The only open item is the operator's call on whether the
+`sovereign-chromofold` *default* search path routes through provenance-A (it stays opt-in, off by default).
 
 ## Honest bottom line
 Search-while-compressed is the through-line of everything this cycle produced (the O(n) memo, the spec-draft demo)
