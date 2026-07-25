@@ -49,9 +49,24 @@ Rust FFI, the engine now offers a **host-pointer FM-search layer** that hides it
   the capability is registered as `fm_host_search` in `chromofold_capability.json`.
 
 So sovereign's step-7 collapses to: read the `.cffm` bytes → `cf_fm_host_load` → `cf_fm_host_count`/`locate` with
-Rust slices → done, **no cudart in the FFI crate.** The remaining work is a thin sovereign-side binding of these
-five functions (the `-sys` crate already links the `.so`); the marshalling itself no longer needs to be written or
-tested there. The device-native async API stays for a future zero-copy path.
+Rust slices → done, **no cudart in the FFI crate.** The device-native async API stays for a future zero-copy path.
+
+### Wired + verified end-to-end on hardware (2026-07-23)
+The sovereign side is now bound and the linked path **verified on a GPU**, not just compiled — in
+`sovereign-chromofold-sys` (the sole unsafe carve-out; `sovereign-chromofold` forbids `unsafe`):
+- the five `cf_fm_host_*` `extern "C"` decls + thin `unsafe` wrappers + opaque `CfFmHostIndex` (`cargo check`
+  default **and** `--features linked`, `cargo test` 6 pass);
+- a **safe `HostFmIndex` RAII wrapper** — host slices in / `Result<Vec<…>>` out, frees on drop, no `unsafe` crosses
+  its API (clippy-clean);
+- an `examples/host_fm_smoke.rs` that **ran against `libchromofold.so` on an RTX 2080 Ti**: loaded `tiny.cffm`,
+  counted every single-symbol pattern via `HostFmIndex`, and confirmed the counts sum to `n=8193` (the global FM
+  invariant) — **PASS.**
+
+So the full cross-repo path is proven: sovereign Rust (safe `HostFmIndex`) → `-sys` FFI → `libchromofold.so` → GPU
+FM-search → correct results. SDD-400 Lane A (FM-index-search-first) is demonstrably wired and correct; the only
+open item is the operator's call on whether to route the `sovereign-chromofold` search surface through it (it stays
+opt-in, off by default). Reproduce: `make -C packaging functional-host` (engine side) + the `cargo run … --example
+host_fm_smoke` command in that file's header (linked side).
 
 ## Honest bottom line
 Search-while-compressed is the through-line of everything this cycle produced (the O(n) memo, the spec-draft demo)
