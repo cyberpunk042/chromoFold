@@ -2,6 +2,13 @@
 
 > Companion visual: **[.cfold vs .secfold spec sheet](https://claude.ai/code/artifact/1bacb7ef-4151-4262-9099-497fa4dbc8b2)** — this scheme (`.cfold`) beside its super-elastic extension (M21, `.secfold`). Indexed in [`ARTIFACTS.md`](ARTIFACTS.md).
 
+> ⚠️ **MEASURED NEGATIVE on a real MoE expert bank (2026-07-27) — see [`m22-real-expert-bank-measurement.md`](m22-real-expert-bank-measurement.md).**
+> Grouped-delta returns **0.99× vs coding each expert alone** on GLM-5.2's 19,456-expert bank: cross-expert
+> `corrcoef +0.0007`, no permutation alignment (best-match cosine +0.6373 vs a random null of +0.6391), and
+> within-expert effective rank 1227/2048. Trained experts are *trained to differ*. The 3.68× in
+> `bench_fold_cost` uses members differing by ±2 of 256 — that models an **adapter library / tied layers**,
+> which is where this lane belongs. Scope it there explicitly.
+>
 > **Status: DESIGN (proposal).** No kernels, no `.mk`, no measured results yet — this doc pins the transform so it can be built + measured deliberately (P7, P10). It proposes a *new compressed representation*, so if accepted it also warrants a `specs/NN-*.md` entry + a roadmap-board update (the formal `specs/03-roadmap.md` still ends at M11; the `docs/mNN` series runs to M19 — this extends the `docs/mNN` forward track as **M20**).
 > **Thesis fit:** a pure P1 move — spend GPU matrix FLOPs to buy back VRAM by exploiting *redundancy across a group of similar tensors* that today are each stored independently.
 

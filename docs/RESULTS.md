@@ -116,6 +116,17 @@ crucially, learned **when it pays**.
   writing and re-reading a 67 MB intermediate. **Caveat:** if you reuse the same weight matrix across many
   multiplies, decoding it once (dense) and reusing wins — fusion re-decodes each time. It's for
   large-intermediate, memory-bound, single-use multiplies.
+- ⚠️ **Qualified by a real-model run — see [`m22-real-expert-bank-measurement.md`](m22-real-expert-bank-measurement.md).**
+  On an **RTX PRO 6000 Blackwell (sm_120, CUDA 13.3)** at real MoE expert shapes (2048×6144, int4),
+  **the fused path is slower than dense at every batch size measured** (B=1 2.24×, B=64 1.47×) — the
+  1.3×-faster crossover above **does not reproduce on sm_120 at these shapes**. Against a fixed-width
+  int4 matvec in the consuming engine it is **33× slower per weight at r=1**, because variable-length
+  block-Huffman cannot be decoded in parallel the way a nibble shift-and-mask can. Bit-exactness held
+  throughout (`rel=0.0e+00`) — P4 is unaffected.
+- **Baseline note.** The 10.6× is against **fp32** (16.78 MB = 4 B/weight); the compressed store is
+  3.02 b/w. Against an already-**int4** checkpoint — how consumers usually arrive — the *remaining*
+  fold is **~1.35×** (2.96 b/w measured on 201M real weights). Both routes land at ~3 bits/weight;
+  they do not stack.
 
 ### Fused KV-cache attention — the long-context brick · `make kv-attention`
 - **What.** Attention that decodes each Key/Value from a compressed KV cache inline (never building the dense

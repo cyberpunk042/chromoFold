@@ -2,6 +2,11 @@
 
 > Companion visual: **[.cfold vs .secfold spec sheet](https://claude.ai/code/artifact/1bacb7ef-4151-4262-9099-497fa4dbc8b2)** — this scheme (`.secfold`) beside the base `.cfold` fold it extends, with the measured error-vs-depth curve. Indexed in [`ARTIFACTS.md`](ARTIFACTS.md).
 
+> ⚠️ **MEASURED NEGATIVE on a real MoE expert bank (2026-07-27) — see [`m22-real-expert-bank-measurement.md`](m22-real-expert-bank-measurement.md).**
+> M21 stacks on M20's grouped atom, and M20 returns 0.99× on a trained expert bank (correlation ≈ 0), so the
+> stack has nothing to fold. On that workload super-elastic costs **bytes and latency** with no accuracy target
+> to spend them on. The lane remains valid for adapter libraries / tied layers.
+>
 > **Status: DESIGN, prototype-backed.** No native kernels yet, but the transform is **implemented +
 > measured** in the Warp sibling (`warp_compress/super_elastic.py` + `bench_super_elastic.py`), so the
 > numbers below are real, not asserted (P7). Extends **M20** (grouped delta superposition).
