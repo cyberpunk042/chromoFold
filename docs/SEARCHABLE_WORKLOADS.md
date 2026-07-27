@@ -75,3 +75,27 @@ fair comparison). RTX 2080 Ti, vocab 64:
 
 This is the honest shape of the searchable thesis: same accuracy, one compressed index for any pattern length,
 GPU-resident — a capability profile llama's quantized KV (or a per-order hash) does not offer.
+
+## Index footprint, measured honestly (`build_index` memory line)
+
+`build_index --fm out.cffm` now prints an authoritative memory breakdown separating the **shippable searchable
+index** (RRR-wavelet BWT + C-table + sampled SA) from the **golden test vectors** the `.cffm` also carries. The
+distinction matters: the `.cffm` *file* is dominated by those test vectors, so **file size is not index size**
+(e.g. n=1M: 850 KB index vs 2.4 MB of golden occurrence positions in the same file). The demo's `fm_bytes` and the
+sovereign `HostFmSearch` both load only the index arrays — never the golden vectors.
+
+Index-only footprint vs the raw int32 token stream it replaces (vocab 64, sa=1/16, `make build/build_index`):
+
+| corpus n | searchable index | vs raw int32 | b/token |
+|---|---|---|---|
+| 2 000 | 2.4 KB | 3.37× | 9.50 |
+| 50 000 | 43 KB | 4.64× | 6.89 |
+| 1 000 000 | 850 KB | 4.71× | 6.80 |
+
+**The honest read (P7):** "4.7× smaller than raw" uses a *weak* baseline — int32 spends 32 bits on a 6-bit token
+(`log₂64`). Against a **bit-packed** raw stream (6.0 b/tok) the self-index is ~6.8 b/tok, i.e. **~0.8 b/tok (~13%)
+larger** — and that packed stream is **not searchable** (no count/`locate` without decompressing and scanning). So
+the index's real claim is *searchability at roughly packed-raw footprint*, converging to ~6.8 b/tok, **not** a raw
+size win. The genuine size win is against an *uncompressed* search structure (a plain suffix array is n·4 = the raw
+int32 size again, ~5× the index; a per-order hash n-gram map is far larger — see the table above). The SA sampling
+rate is the knob: denser (sa=1/8) costs more bits but locates faster; sparser trades the other way.

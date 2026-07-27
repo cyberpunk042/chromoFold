@@ -527,6 +527,27 @@ int main(int argc, char **argv) {
     std::printf("built %s  (native C++ FM-index)   patterns=%d  occurrences=%d  sa_sample=%d\n", fm_out.c_str(),
                 P, (int)locpos.size(), sa_sample);
     std::printf("  self-check: CPU count == naive AND CPU locate == naive  %s\n", fm_ok ? "OK" : "FAIL");
+
+    // Honest memory breakdown (P1 compute-for-memory, P10): the SHIPPABLE searchable index
+    // — RRR-wavelet BWT + C-table + sampled SA — versus the raw tokens it replaces. The .cffm
+    // ALSO carries golden test vectors (patterns + all occurrence positions); those are NOT
+    // part of the index and dominate the file at small n, so we report them separately.
+    const uint64_t header_bytes = 72;  // "CFFM" + version + n(8) + 15*u32 + rrr(8)
+    const uint64_t index_bytes = header_bytes
+        + w.classes.size() * 4 + w.offsets.size() * 4
+        + w.rank_a.size() * 4 + w.rank_d.size() * 2
+        + w.off_a.size() * 4 + w.off_d.size() * 2
+        + w.offbase.size() * 4 + w.zeros.size() * 4
+        + fm.C.size() * 4 + fm.mwords.size() * 4 + fm.msb.size() * 4 + fm.sval.size() * 4;
+    const uint64_t golden_bytes = flat.size() * 4 + pstart.size() * 4 + plen_arr.size() * 4
+        + cnt_g.size() * 4 + locoff.size() * 4 + locpos.size() * 4;
+    const uint64_t raw_bytes = (uint64_t)n * 4;  // int32 token stream you'd otherwise keep to search
+    std::printf("  memory: raw tokens %llu B | searchable index %llu B (%.2fx vs raw, %.2f b/tok, sa=1/%d) "
+                "| golden test vecs %llu B (not shipped)\n",
+                (unsigned long long)raw_bytes, (unsigned long long)index_bytes,
+                raw_bytes ? (double)raw_bytes / (double)index_bytes : 0.0,
+                (double)index_bytes * 8.0 / (double)N, sa_sample,
+                (unsigned long long)golden_bytes);
   }
   return (self_ok && fm_ok) ? 0 : 3;
 }
