@@ -75,6 +75,27 @@ So provenance-A is no longer `-sys`-only: it sits beside the CPU-native `FmIndex
 both index-scoped, both agreeing with the same oracle. The only open item is the operator's call on whether the
 `sovereign-chromofold` *default* search path routes through provenance-A (it stays opt-in, off by default).
 
+## When to flip provenance-A (measured, RTX 2080 Ti)
+The two backends are correctness-equivalent (`parity_smoke`: A == B == oracle, count **and** locate, 309 patterns
+including the zero-occurrence path). So the routing decision is purely cost, and it has two axes — both measured, so
+the operator decides on numbers, not vibes:
+
+- **Memory.** The shippable searchable index is ~**6.8 b/tok** (converged, sa=1/16) — ~0.8 b/tok over bit-packed raw,
+  the honest price of `count`/`locate`. See [`SEARCHABLE_WORKLOADS.md`](SEARCHABLE_WORKLOADS.md) ("Index footprint").
+- **Throughput** (`sovereign-chromofold` `bench_search`, batched count, build/load excluded):
+
+  | corpus | batch=1 | batch=4096 | crossover |
+  |---|---|---|---|
+  | 50 000 | CPU ~2000× | CPU 2.64M vs GPU 2.06M pat/s | **CPU wins everywhere** |
+  | 1 000 000 | CPU ~2000× | **GPU 1.8M vs CPU 0.73M pat/s (2.5×)** | GPU wins only at large batch |
+
+  The GPU **host** path has a fixed ~1.7–2.3 ms per-call floor (malloc/memcpy/launch/sync), so it plateaus ~1.8–2M
+  pat/s regardless of batch; the CPU index degrades with corpus size (cache). **So provenance-A via `HostFmSearch`
+  is a scale/capacity play — large GPU-resident corpus + large query batches — not a latency play.** For interactive
+  or small-corpus search, provenance-B (CPU) is the right default. The device-native async API (resident device
+  buffers, no per-call marshalling) would move the crossover much earlier, but `HostFmSearch` does not wire that
+  today, so the table above is the honest current ceiling — not a claim about the kernel's peak.
+
 ## Honest bottom line
 Search-while-compressed is the through-line of everything this cycle produced (the O(n) memo, the spec-draft demo)
 **and** it's the only ChromoFold capability sovereign-os has committed to bind first — because it's the one with no
