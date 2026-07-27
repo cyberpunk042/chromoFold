@@ -136,6 +136,15 @@ fm-search: $(BUILD)/fm_search
 suffix-array: $(BUILD)/suffix_array
 	$(BUILD)/suffix_array
 
+# Cross-backend parity fixtures (deterministic): one corpus as raw tokens (.toks) + its FM-index (.cffm), so the
+# sovereign-os `parity_smoke` example can prove provenance-A (GPU HostFmSearch) == provenance-B (CPU FmIndex) ==
+# naive oracle on the SAME data. *.cffm/.toks are git-ignored (regenerable) — this target is the reproduction.
+parity-fixtures: $(BUILD)/build_index
+	@mkdir -p packaging/fixtures
+	$(BUILD)/build_index $(BUILD)/parity.cfrw --n 50000 --vocab 48 --seed 21 --sa-sample 8 \
+	  --fm packaging/fixtures/parity.cffm --dump-tokens packaging/fixtures/parity.toks
+	@echo "wrote packaging/fixtures/parity.{cffm,toks} — feed both to sovereign-os `parity_smoke`"
+
 # Searchable-thesis demo (docs/SEARCHABLE_WORKLOADS.md): the verified FM-index as a COMPRESSED, GPU-resident
 # n-gram / prompt-lookup speculative-draft oracle vs an uncompressed hash n-gram table (hit-rate + memory). No Warp.
 spec-draft: $(BUILD)/spec_draft_demo $(BUILD)/build_index
