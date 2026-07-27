@@ -19,6 +19,21 @@ artifact, republish to the **same URL** (don't mint a new link) and leave the ro
 
 ## Index
 
+### Searchable while compressed — engine report · 2026-07-27
+The measured account of the searchable FM-index substrate: the cross-repo integration (safe sovereign Rust → `-sys`
+FFI → `libchromofold.so` → GPU, gated `A==B==oracle`), the **CF_RRR_S compute↔memory frontier** (the signature
+visual — index b/tok vs search ms, asymmetric: 8× sample rate → −11% size, +56% latency), the honest footprint
+(~6.8 b/tok, ~13% over bit-packed raw), and the GPU/CPU latency crossover. Foregrounds **three refuted hypotheses**
+as first-class results — host-marshalling bottleneck, WSL2 tax, and the single-descent 2× (caught by the parity gate:
+count PASS / locate FAIL, reverted). Honesty-as-method is the editorial hook.
+- **Artifact:** https://claude.ai/code/artifact/1b983408-3d5e-4a9c-99c4-69fd89b97894
+- **Draws from:** [`SOVEREIGN_SEARCH_INTEGRATION.md`](SOVEREIGN_SEARCH_INTEGRATION.md),
+  [`SEARCHABLE_WORKLOADS.md`](SEARCHABLE_WORKLOADS.md); `../packaging/{functional_device.c,launch_latency.cu}`;
+  sovereign-os `sovereign-chromofold` examples (`parity_smoke`, `bench_search_device`)
+- **Receipts (all committed):** CF_RRR_S sweep 16→128 (7.56 b/tok/1.118 ms → 6.70/1.743), all parity PASS; footprint
+  converges 6.80 b/tok at n=1M; crossover GPU 1.8M vs CPU 0.73M pat/s @ batch 4096 (1M); floor decomposition
+  launch 0.028 ms / marshalling ~0.2 / kernel ~1.4; device-native vs host 1.07–1.41× (the negative).
+
 ### .cfold vs .secfold — weight-fold spec sheet · 2026-07-23
 The two tensor-folding schemes side by side: `.cfold` grouped-delta superposition (M20 — group similar tensors
 against a root or computed-centroid reference, one rank-`r` factored atom) vs `.secfold` super-elastic fold (M21 —
