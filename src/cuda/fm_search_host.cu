@@ -149,3 +149,11 @@ extern "C" void cf_fm_host_free(cf_fm_host_index* ix) {
     for (void* p : ix->allocs) cudaFree(p);
     delete ix;
 }
+
+// Device-native path: hand back the resident device view so the caller can drive cf_fm_*_async directly.
+// The view's pointers stay owned by `ix` (valid until cf_fm_host_free); the caller copies the POD by value.
+extern "C" cf_status cf_fm_host_view(const cf_fm_host_index* ix, cf_fm_view* out) {
+    if (ix == nullptr || out == nullptr) return CF_ERR_INVALID_ARGUMENT;
+    *out = ix->v;
+    return CF_OK;
+}

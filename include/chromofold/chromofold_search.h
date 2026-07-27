@@ -97,6 +97,31 @@ cf_status cf_fm_host_locate(const cf_fm_host_index *ix, const int32_t *rows, uin
 /* release the device-resident index. */
 void cf_fm_host_free(cf_fm_host_index *ix);
 
+/* --- FM-index DEVICE-NATIVE path (P5: zero host round-trip in the hot loop) ---
+ * The host layer above copies the (small) query + result every call. For a caller that keeps query data resident
+ * on the device across calls — or simply wants to amortize allocation — these helpers expose the device-native
+ * async API (`cf_fm_*_async` above) without the caller linking cudart. The engine still owns all CUDA; the caller
+ * holds opaque device pointers (void*) and drives the async kernels on a stream. Copy in/out only when it chooses.
+ * All entry points honor the null_arg_contract (CF_ERR_INVALID_ARGUMENT on a NULL required pointer before any CUDA
+ * call). ADDITIVE to abi_version 0 (backward-compatible: no existing symbol changed). */
+
+/* Expose the resident device-side FM view built by `cf_fm_host_load`, so the caller can drive `cf_fm_count_async`
+ * / `cf_fm_ranges_async` / `cf_fm_locate_async` directly. The view's pointers are owned by `ix` and valid until
+ * `cf_fm_host_free(ix)`; copy it by value, do not free its contents. */
+cf_status cf_fm_host_view(const cf_fm_host_index *ix, cf_fm_view *out);
+
+/* Device-memory helpers (thin cudaMalloc/Free/Memcpy wrappers). `*out`/`dptr` are DEVICE pointers. `cf_device_alloc`
+ * of 0 bytes still returns a unique freeable pointer. h2d = host→device (upload), d2h = device→host (download). */
+cf_status cf_device_alloc(size_t nbytes, void **out);
+void cf_device_free(void *dptr);
+cf_status cf_device_h2d(void *ddst, const void *hsrc, size_t nbytes);
+cf_status cf_device_d2h(void *hdst, const void *dsrc, size_t nbytes);
+
+/* Stream helpers. A NULL stream everywhere means the default stream. `cf_stream_sync(NULL)` syncs the default stream. */
+cf_status cf_stream_create(void **out);
+void cf_stream_destroy(void *stream);
+cf_status cf_stream_sync(void *stream);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

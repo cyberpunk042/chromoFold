@@ -15,13 +15,13 @@ INC  := -I$(ROOT)/include
 NVFLAGS := -O3 -std=c++17 -arch=$(ARCH) $(INC) --expt-relaxed-constexpr -Xcompiler -fPIC
 
 # query-side translation units (the extern "C" cf_* entry points). Build-side / in-progress files excluded.
-SRC := access.cu rank.cu rrr.cu rrr_wavelet.cu fm_search.cu fm_search_host.cu fused_embedding.cu fused_kv_attention.cu fused_matmul.cu
+SRC := access.cu rank.cu rrr.cu rrr_wavelet.cu fm_search.cu fm_search_host.cu device_mem.cu fused_embedding.cu fused_kv_attention.cu fused_matmul.cu
 CU  := $(addprefix $(ROOT)/src/cuda/,$(SRC))
 BUILD := build
 
 FIXTURES := fixtures/tiny.cfwv fixtures/tiny.cfrr fixtures/tiny.cfrw
 
-.PHONY: all lib conformance seam-check seams functional clean
+.PHONY: all lib conformance seam-check seams functional functional-host functional-device clean
 all: seams
 
 lib: $(BUILD)/libchromofold.so
@@ -60,6 +60,13 @@ functional-host: $(BUILD)/libchromofold.so functional_host.c fixtures/tiny.cffm
 	$(CC) -std=c11 $(INC) functional_host.c -L$(BUILD) -lchromofold -L$(CUDA_LIB) -lcudart \
 	  -Wl,-rpath,$(BUILD) -Wl,-rpath,$(CUDA_LIB) -o $(BUILD)/functional_host
 	$(BUILD)/functional_host fixtures/tiny.cffm
+
+# GPU FUNCTIONAL run of the DEVICE-NATIVE path (P5): resident device buffers + cf_fm_count_async on a stream,
+# driven from a PURE C caller via the cf_device_*/cf_stream_* ABI helpers (no CUDA in the source). Verified vs golden.
+functional-device: $(BUILD)/libchromofold.so functional_device.c fixtures/tiny.cffm
+	$(CC) -std=c11 $(INC) functional_device.c -L$(BUILD) -lchromofold -L$(CUDA_LIB) -lcudart \
+	  -Wl,-rpath,$(BUILD) -Wl,-rpath,$(CUDA_LIB) -o $(BUILD)/functional_device
+	$(BUILD)/functional_device fixtures/tiny.cffm
 
 clean:
 	rm -rf $(BUILD)
