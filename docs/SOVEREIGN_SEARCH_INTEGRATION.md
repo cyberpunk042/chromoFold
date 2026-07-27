@@ -89,12 +89,21 @@ the operator decides on numbers, not vibes:
   | 50 000 | CPU ~2000× | CPU 2.64M vs GPU 2.06M pat/s | **CPU wins everywhere** |
   | 1 000 000 | CPU ~2000× | **GPU 1.8M vs CPU 0.73M pat/s (2.5×)** | GPU wins only at large batch |
 
-  The GPU **host** path has a fixed ~1.7–2.3 ms per-call floor (malloc/memcpy/launch/sync), so it plateaus ~1.8–2M
-  pat/s regardless of batch; the CPU index degrades with corpus size (cache). **So provenance-A via `HostFmSearch`
-  is a scale/capacity play — large GPU-resident corpus + large query batches — not a latency play.** For interactive
-  or small-corpus search, provenance-B (CPU) is the right default. The device-native async API (resident device
-  buffers, no per-call marshalling) would move the crossover much earlier, but `HostFmSearch` does not wire that
-  today, so the table above is the honest current ceiling — not a claim about the kernel's peak.
+  The GPU path has a fixed ~1.5–2.3 ms per-call floor, so it plateaus ~1.8–2M pat/s regardless of batch; the CPU
+  index degrades with corpus size (cache). **So provenance-A is a scale/capacity play — large GPU-resident corpus +
+  large query batches — not a latency play.** For interactive or small-corpus search, provenance-B (CPU) is the
+  right default.
+
+  **What the fixed floor is — measured, not assumed (`bench_search_device`).** We built the device-native path
+  (`DeviceFmIndex` over resident device buffers, `cf_fm_count_async` on a stream, zero host round-trip) expecting
+  the host layer's per-call malloc/memcpy to be that floor — i.e. that removing it would move the crossover much
+  earlier. **The measurement refuted that:** the device-native hot loop (query pre-resident, result kept on device)
+  beats the `HostFmSearch` host path by only **1.07–1.41×**, and both sit at the same ~1.2–1.8 ms floor that is
+  **batch-independent for K≥16**. So the floor is **launch/kernel-bound, not host-marshalling-bound** — zero-copy is
+  a marginal win here, not the lever. The device-native path is correct, wired, and verified (`device_search`), and
+  it is the right API for a device-resident producer/consumer pipeline; it just does **not** materially move this
+  search workload's latency. Fewer, larger launches matter more than removing host copies. (An honest negative —
+  it replaces the earlier speculation that the device-native API would shift the crossover.)
 
 ## Honest bottom line
 Search-while-compressed is the through-line of everything this cycle produced (the O(n) memo, the spec-draft demo)
