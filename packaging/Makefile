@@ -21,7 +21,7 @@ BUILD := build
 
 FIXTURES := fixtures/tiny.cfwv fixtures/tiny.cfrr fixtures/tiny.cfrw
 
-.PHONY: all lib conformance seam-check seams functional functional-host functional-device clean
+.PHONY: all lib conformance seam-check seams functional functional-host functional-device launch-latency clean
 all: seams
 
 lib: $(BUILD)/libchromofold.so
@@ -67,6 +67,13 @@ functional-device: $(BUILD)/libchromofold.so functional_device.c fixtures/tiny.c
 	$(CC) -std=c11 $(INC) functional_device.c -L$(BUILD) -lchromofold -L$(CUDA_LIB) -lcudart \
 	  -Wl,-rpath,$(BUILD) -Wl,-rpath,$(CUDA_LIB) -o $(BUILD)/functional_device
 	$(BUILD)/functional_device fixtures/tiny.cffm
+
+# Diagnostic (hardware-gated): isolates kernel launch + stream sync latency from kernel compute, so a search
+# throughput floor can be attributed honestly (see bench_search_device in sovereign-os). No .so, no fixtures.
+launch-latency: launch_latency.cu
+	@mkdir -p $(BUILD)
+	$(NVCC) -O3 -std=c++17 -arch=$(ARCH) launch_latency.cu -o $(BUILD)/launch_latency
+	$(BUILD)/launch_latency
 
 clean:
 	rm -rf $(BUILD)

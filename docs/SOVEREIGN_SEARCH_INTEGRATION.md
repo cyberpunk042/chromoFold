@@ -99,11 +99,30 @@ the operator decides on numbers, not vibes:
   the host layer's per-call malloc/memcpy to be that floor — i.e. that removing it would move the crossover much
   earlier. **The measurement refuted that:** the device-native hot loop (query pre-resident, result kept on device)
   beats the `HostFmSearch` host path by only **1.07–1.41×**, and both sit at the same ~1.2–1.8 ms floor that is
-  **batch-independent for K≥16**. So the floor is **launch/kernel-bound, not host-marshalling-bound** — zero-copy is
-  a marginal win here, not the lever. The device-native path is correct, wired, and verified (`device_search`), and
-  it is the right API for a device-resident producer/consumer pipeline; it just does **not** materially move this
-  search workload's latency. Fewer, larger launches matter more than removing host copies. (An honest negative —
-  it replaces the earlier speculation that the device-native API would shift the crossover.)
+  **batch-independent for K≥16**. So the floor is **kernel-bound, not host-marshalling-bound** — zero-copy is a
+  marginal win here, not the lever. The device-native path is correct, wired, and verified (`device_search`), and it
+  is the right API for a device-resident producer/consumer pipeline; it just does **not** materially move this search
+  workload's latency. (An honest negative — it replaces the earlier speculation that the device-native API would
+  shift the crossover.)
+
+  **Where the ~1.5 ms actually goes — chased to the bottom, measured at each layer:**
+  1. *Not launch/sync.* `make -C packaging launch-latency`: an empty kernel launch + `cudaStreamSynchronize` is
+     **0.028 ms** here — and this box is WSL2, so the paravirtualization-tax hypothesis is also **refuted by
+     measurement**, not assumed.
+  2. *Not host marshalling.* Device-native (no host copy in the loop) ≈ the host layer (point above); the copy is
+     only ~0.1–0.3 ms.
+  3. *It is kernel compute (~1.4 ms by subtraction).* The FM count kernel is one thread per pattern running backward
+     search; each pattern does `len × 2 × levels` ≈ 72 RRR rank queries, and each rank is a **two-level RRR rank that
+     scans up to `CF_RRR_S = 64` blocks in-superblock** and combinatorially decodes each — the entropy decode of the
+     compressed index.
+
+  This is **P1 (compute-for-memory) made literal**: the decode compute *is* the price of the 6.8 b/tok compression.
+  provenance-B (CPU) is lower-latency precisely because its FM rank is O(1) over an *uncompressed* directory — it
+  buys speed with memory. So A and B are two operating points on one frontier, not a fast/slow ranking: **A =
+  compute-for-memory (smaller, searchable-compressed, decode-bound); B = memory-for-speed (bigger, O(1) rank).** The
+  concrete lever if provenance-A ever needs lower latency is the RRR sample rate `CF_RRR_S` (denser samples → shorter
+  in-superblock scan → faster search, larger index) — a compile-time engine change across build+query, not a
+  plumbing tweak. Not pursued here (no consumer needs sub-ms compressed search yet); recorded as the identified lever.
 
 ## Honest bottom line
 Search-while-compressed is the through-line of everything this cycle produced (the O(n) memo, the spec-draft demo)
