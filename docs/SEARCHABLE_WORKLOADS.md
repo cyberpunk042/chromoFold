@@ -122,8 +122,16 @@ directory grows → larger index. Swept end-to-end (n=200k, vocab 64, sa=1/16; e
    fine-tune, barely a size knob. `S=32` (7.07 b/tok, 1.19 ms) is arguably a better default than 64 if search latency
    matters — 12% faster for 3.7% more memory — but that's the consumer's call.
 2. **You cannot tune out of the ~1 ms floor with `S`.** Even the densest point (`S=16`) is 1.12 ms. The floor is the
-   entropy decode itself — ~72 rank queries per pattern, each a combinatorial block decode — and `S` only shortens the
-   *scan*, not the *number* of ranks or the per-block decode. The real lever for sub-ms compressed search is
-   **algorithmic** (fewer ranks: blocked/bidirectional backward search) or a cheaper per-rank decode — not `S`. This is
-   P1 (compute-for-memory) with its price tag shown: the index stays ~6.8 b/tok and searchable, and that costs ~1–1.7
-   ms of GPU decode per batch, tunable but not eliminable via sampling.
+   entropy decode itself — each backward-search step does `2 × levels` RRR rank scans (two `cf_rrrw_rank_one`
+   interval queries, for `lo` and `hi`), and `S` only shortens each *scan*, not the *number* of scans. The lever is
+   **fewer scans**, not sampling. This is P1 (compute-for-memory) with its price tag shown: the index stays ~6.8 b/tok
+   and searchable, and that costs ~1–1.7 ms of GPU decode per batch, tunable but not eliminable via sampling.
+
+   *Attempted and refuted (honest negative).* The obvious "fewer scans" move — replace `C[c] + rank(c,i)` with a
+   single-position wavelet descent of `i` (halving the rank1 scans per step) — assumes the image of position 0 down
+   symbol `c`'s path equals `C[c]`. It does **not** in this whole-level-bitvector layout: the descent lands at
+   `C[c] + rank(c,i) + δ_c` for a per-symbol offset `δ_c` that cancels in `hi − lo` (so `count` stays correct) but
+   corrupts the *absolute* `lo`/`hi` (so `ranges`/`locate` break). The `parity_smoke` gate caught exactly this —
+   count PASS, locate FAIL — and it was reverted. The correct single-descent form needs a precomputed
+   `D[c] = C[c] − lf(c,0)` table in `cf_fm_view`, i.e. an **ABI/format change** — real, but unjustified while no
+   consumer needs sub-ms compressed search. Recorded so it is not re-attempted naively.
