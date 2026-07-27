@@ -99,3 +99,31 @@ the index's real claim is *searchability at roughly packed-raw footprint*, conve
 size win. The genuine size win is against an *uncompressed* search structure (a plain suffix array is n·4 = the raw
 int32 size again, ~5× the index; a per-order hash n-gram map is far larger — see the table above). The SA sampling
 rate is the knob: denser (sa=1/8) costs more bits but locates faster; sparser trades the other way.
+
+## The compute↔memory frontier of the index (`CF_RRR_S` sweep, measured)
+
+The RRR rank sample rate `CF_RRR_S` (blocks per superblock) is the index's core compute↔memory dial: a backward-search
+`count` runs ~`len × 2 × levels` two-level RRR rank queries per pattern, and each rank **scans up to `CF_RRR_S`
+in-superblock blocks** (then decodes each). Denser samples (small `S`) shorten that scan → faster search, but the rank
+directory grows → larger index. Swept end-to-end (n=200k, vocab 64, sa=1/16; each point rebuilds `build_index` + the
+`.so`, gated on `parity_smoke` = provenance-A == provenance-B == oracle; device-native search @ batch 4096, RTX 2080 Ti):
+
+| `CF_RRR_S` | index b/tok | GPU search ms | correctness |
+|---|---|---|---|
+| 16 | 7.56 | 1.118 | A==B==oracle |
+| 32 | 7.07 | 1.190 | A==B==oracle |
+| **64 (default)** | **6.82** | **1.359** | A==B==oracle |
+| 128 | 6.70 | 1.743 | A==B==oracle |
+
+**Two honest findings (P7/P10):**
+1. **The frontier is asymmetric.** Over an 8× range of `S` the index moves only **7.56→6.70 b/tok (−11%)** while
+   latency moves **1.118→1.743 ms (+56%)**. Memory is *insensitive* to `S` (the RRR class/offset streams dominate the
+   index; the rank directory is a thin slice), but latency is *sensitive* (scan length ∝ `S`). So `S` is a latency
+   fine-tune, barely a size knob. `S=32` (7.07 b/tok, 1.19 ms) is arguably a better default than 64 if search latency
+   matters — 12% faster for 3.7% more memory — but that's the consumer's call.
+2. **You cannot tune out of the ~1 ms floor with `S`.** Even the densest point (`S=16`) is 1.12 ms. The floor is the
+   entropy decode itself — ~72 rank queries per pattern, each a combinatorial block decode — and `S` only shortens the
+   *scan*, not the *number* of ranks or the per-block decode. The real lever for sub-ms compressed search is
+   **algorithmic** (fewer ranks: blocked/bidirectional backward search) or a cheaper per-rank decode — not `S`. This is
+   P1 (compute-for-memory) with its price tag shown: the index stays ~6.8 b/tok and searchable, and that costs ~1–1.7
+   ms of GPU decode per batch, tunable but not eliminable via sampling.
